@@ -4,7 +4,7 @@ import {
   handler,
   normalizeGenerationRequest,
   parseReferenceImage,
-} from './generate-image'
+} from '../../netlify/functions/generate-image'
 
 describe('normalizeGenerationRequest', () => {
   it('falls back to safe defaults for unsupported values', () => {
