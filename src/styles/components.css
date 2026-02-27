@@ -1,0 +1,664 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: 600 13px/1 var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 10px 20px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-height: 40px;
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--text-inverse);
+}
+
+.btn-primary:hover {
+  background: var(--accent-dark);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-app);
+  border-color: var(--neutral-500);
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: var(--text-inverse);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 18px rgba(28, 33, 40, 0.05);
+}
+
+.card--hvac {
+  border-top: 2px solid var(--accent);
+}
+
+.card--hot {
+  border-top: 3px solid var(--danger);
+}
+
+.card--cold {
+  border-top: 3px solid var(--info);
+}
+
+.card--ok {
+  border-top: 3px solid var(--success);
+}
+
+.card--warning {
+  border-top: 3px solid var(--warning);
+}
+
+.card:hover {
+  box-shadow: 0 6px 24px rgba(28, 33, 40, 0.08);
+}
+
+.card__header {
+  padding: 14px 20px;
+  background: rgba(245, 247, 249, 0.82);
+  border-bottom: 1px solid var(--border);
+  font: 600 13px/1 var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.card__body {
+  padding: 20px;
+}
+
+.input {
+  font: 400 13px/1.4 var(--font-body);
+  color: var(--text-primary);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 9px 12px;
+  width: 100%;
+  transition: all 0.15s;
+  min-height: 40px;
+}
+
+.input:hover {
+  border-color: var(--neutral-300);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--shadow-focus);
+  background: var(--bg-surface);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+.input--mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.05em;
+}
+
+.label {
+  display: block;
+  font: 400 9px/1 var(--font-mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.badge {
+  display: inline-block;
+  font: 500 10px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  padding: 3px 8px;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+}
+
+.badge--accent {
+  color: var(--accent);
+  background: var(--accent-tint);
+  border-color: rgba(27, 107, 181, 0.2);
+}
+
+.badge--danger {
+  color: var(--danger);
+  background: rgba(168, 69, 58, 0.08);
+  border-color: rgba(168, 69, 58, 0.2);
+}
+
+.badge--success {
+  color: var(--success);
+  background: rgba(106, 138, 122, 0.08);
+  border-color: rgba(106, 138, 122, 0.2);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  font: 400 13px/1.2 var(--font-body);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-left: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: all 0.15s;
+  min-height: 40px;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--text-primary);
+}
+
+.nav-item.active {
+  background: var(--accent-tint);
+  color: var(--accent);
+  border-left-color: var(--accent);
+  font-weight: 500;
+}
+
+.nav-item.is-completed .nav-item__index {
+  background: var(--success);
+  color: var(--text-inverse);
+}
+
+.nav-item__index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  font: 400 10px/1 var(--font-mono);
+}
+
+.valtria-logo {
+  width: clamp(190px, 18vw, 250px);
+  height: 60px;
+  border: 1px solid #D7DEE7;
+  border-radius: 4px;
+  background: #FFFFFF;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.valtria-logo__image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.valtria-logo__wordmark {
+  font: 700 42px/1 var(--font-display);
+  color: #0F1824;
+  letter-spacing: 0.02em;
+}
+
+.step-card {
+  scroll-margin-top: 24px;
+}
+
+.step-card--current {
+  border-color: var(--accent);
+}
+
+.step-card--completed {
+  border-color: var(--neutral-300);
+}
+
+.step-card__header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.step-index {
+  color: var(--accent);
+}
+
+.step-title {
+  font-size: 24px;
+}
+
+.step-help {
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.step-block {
+  margin-bottom: 16px;
+}
+
+.field-control {
+  margin-bottom: 12px;
+}
+
+.field-hint {
+  margin-top: 6px;
+  color: var(--text-secondary);
+}
+
+.preset-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.preset-chip {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 10px;
+  text-align: left;
+  display: grid;
+  gap: 6px;
+  cursor: pointer;
+  min-height: 72px;
+}
+
+.preset-chip:hover {
+  border-color: var(--neutral-500);
+  background: var(--bg-subtle);
+}
+
+.preset-chip--active {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.preset-chip__title {
+  font: 600 12px/1 var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.preset-chip__description {
+  font: 400 12px/1.4 var(--font-body);
+  color: var(--text-secondary);
+}
+
+.tool-switch {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tool-switch .btn {
+  min-width: 140px;
+}
+
+.advanced-settings {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-subtle);
+}
+
+.palette-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.palette-editor__intro {
+  color: var(--text-secondary);
+}
+
+.palette-strip {
+  display: flex;
+  height: 10px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.palette-strip--tight {
+  height: 8px;
+}
+
+.palette-strip__swatch {
+  flex: 1;
+}
+
+.palette-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.palette-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-raised);
+}
+
+.palette-row__preview {
+  width: 28px;
+  height: 28px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.palette-row__content {
+  min-width: 0;
+}
+
+.palette-row__custom {
+  margin-top: 8px;
+}
+
+.palette-warning {
+  margin-top: 4px;
+}
+
+.excluded-colors {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.excluded-colors li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
+.excluded-colors__swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.prompt-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.prompt-panel__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.prompt-panel__meta {
+  color: var(--text-secondary);
+}
+
+.prompt-output {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--neutral-900);
+  color: #9ED28E;
+  padding: 16px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 340px;
+  overflow: auto;
+}
+
+.prompt-placeholder {
+  border: 1px dashed var(--neutral-300);
+  border-radius: 4px;
+  padding: 16px;
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+}
+
+.session-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.session-meta .t-small {
+  color: var(--text-inverse);
+}
+
+.auth-card__body {
+  display: grid;
+  gap: 18px;
+}
+
+.auth-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.auth-role {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  border-radius: 4px;
+  background: var(--bg-raised);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.auth-role strong {
+  font: 600 18px/1.2 var(--font-display);
+  color: var(--text-primary);
+}
+
+.auth-role .t-small {
+  color: var(--text-secondary);
+}
+
+.auth-role--active {
+  border-left-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+}
+
+.reference-intake {
+  display: grid;
+  gap: 10px;
+}
+
+.reference-dropzone {
+  display: grid;
+  gap: 14px;
+  border: 1px dashed var(--neutral-300);
+  border-radius: 4px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.reference-dropzone:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--shadow-focus);
+}
+
+.reference-dropzone--filled {
+  border-style: solid;
+}
+
+.reference-dropzone__copy {
+  display: grid;
+  gap: 6px;
+}
+
+.reference-dropzone__copy .t-small {
+  color: var(--text-secondary);
+}
+
+.reference-dropzone__input {
+  display: none;
+}
+
+.reference-dropzone__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.reference-preview {
+  display: grid;
+  gap: 12px;
+}
+
+.reference-preview__image {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.reference-preview__meta {
+  display: grid;
+  gap: 6px;
+}
+
+.reference-preview__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.image-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.image-panel__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.image-panel__error {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid rgba(168, 69, 58, 0.2);
+  border-radius: 4px;
+  color: var(--danger);
+  background: rgba(168, 69, 58, 0.06);
+}
+
+.image-panel__result {
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.image-panel__image {
+  width: 100%;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  object-fit: contain;
+}
+
+.image-panel__caption {
+  color: var(--text-secondary);
+}
+
+.admin-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-actions__buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-actions__notice {
+  color: var(--text-secondary);
+}
+
+@media (max-width: 980px) {
+  .card__body {
+    padding: 16px;
+  }
+
+  .progress-rail .nav-item {
+    flex-direction: column;
+    align-items: flex-start;
+    min-height: 52px;
+    font-size: 12px;
+  }
+
+  .step-title {
+    font-size: 21px;
+  }
+
+  .valtria-logo {
+    width: clamp(170px, 52vw, 220px);
+    height: 50px;
+    padding: 5px 8px;
+  }
+
+  .auth-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reference-preview__actions,
+  .image-panel__actions,
+  .admin-actions__buttons {
+    flex-direction: column;
+  }
+
+  .step-card {
+    scroll-margin-top: 16px;
+  }
+}

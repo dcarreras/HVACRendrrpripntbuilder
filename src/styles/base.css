@@ -1,0 +1,95 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  font: 400 14px/1.7 var(--font-body);
+  color: var(--text-primary);
+  background:
+    radial-gradient(
+      1000px 400px at 10% -10%,
+      rgba(27, 107, 181, 0.08),
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 350px at 100% 0%,
+      rgba(74, 159, 212, 0.06),
+      transparent 55%
+    ),
+    var(--bg-app);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.t-hero {
+  font: 700 36px/1.1 var(--font-display);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.t-title {
+  font: 700 28px/1.2 var(--font-display);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.t-section {
+  font: 600 14px/1 var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.t-body {
+  font: 400 14px/1.7 var(--font-body);
+  margin: 0;
+}
+
+.t-small {
+  font: 400 12px/1.6 var(--font-body);
+  margin: 0;
+}
+
+.t-lead {
+  font: 300 16px/1.6 var(--font-body);
+  margin: 0;
+}
+
+.t-label {
+  font: 400 10px/1 var(--font-mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.t-code {
+  font: 400 12px/1.5 var(--font-mono);
+  letter-spacing: 0.05em;
+}
+
+.t-kpi {
+  font: 700 32px/1 var(--font-display);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}

@@ -1,0 +1,38 @@
+:root {
+  --font-display: 'Barlow Condensed', sans-serif;
+  --font-body: 'Barlow', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+
+  --bg-app: #E8ECF0;
+  --bg-subtle: #F5F7F9;
+  --bg-surface: #FFFFFF;
+  --bg-raised: #F0F3F6;
+
+  --border: #CDD3DC;
+  --border-focus: #1B6BB5;
+
+  --text-primary: #1E2530;
+  --text-secondary: #4A5566;
+  --text-muted: #8090A0;
+  --text-inverse: #F0F3F6;
+
+  --neutral-900: #1C2128;
+  --neutral-700: #3C4550;
+  --neutral-500: #6A7480;
+  --neutral-300: #9DAAB8;
+  --neutral-100: #C4CDD6;
+
+  --accent: #1B6BB5;
+  --accent-dark: #0A3D6B;
+  --accent-light: #4A9FD4;
+  --accent-tint: rgba(27, 107, 181, 0.08);
+
+  --success: #6A8A7A;
+  --warning: #C6A84B;
+  --danger: #A8453A;
+  --info: #3A78A0;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-focus: 0 0 0 3px rgba(27, 107, 181, 0.2);
+}

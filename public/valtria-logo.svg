@@ -1,0 +1,25 @@
+<svg width="640" height="170" viewBox="0 0 640 170" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="640" height="170" fill="transparent" />
+
+  <circle cx="78" cy="86" r="66" fill="#06080F" />
+  <path d="M45 59H58L73 111L87 59H100L79 126H67L45 59Z" fill="#F5F7F9" />
+  <path d="M99 101L114 87L129 101V116L114 128L99 116V101Z" fill="#F5F7F9" />
+  <path d="M115 128L95 59H108L126 128H115Z" fill="#F5F7F9" />
+
+  <text x="172" y="114" font-family="Barlow, Arial, sans-serif" font-size="104" font-weight="700" letter-spacing="-4">
+    <tspan fill="#0C1220">val</tspan>
+    <tspan fill="#1B6BB5">tria</tspan>
+  </text>
+
+  <text
+    x="365"
+    y="42"
+    font-family="Barlow, Arial, sans-serif"
+    font-size="30"
+    font-weight="500"
+    fill="#1E2530"
+    letter-spacing="-0.5"
+  >
+    by clauger
+  </text>
+</svg>
