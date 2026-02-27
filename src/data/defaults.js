@@ -1,22 +1,23 @@
 export const DEFAULT_FIELDS = {
   project_name: 'Edwards Lifescience 305',
-  room_type: 'HVAC Plant Room',
-  building_use: 'Pharmaceutical facility',
-  visual_style: 'Ultra-clean technical engineering',
-  industry: 'Clean room / ISO',
-  mood: 'Technical precision - corporate marketing',
-  output_use: 'Marketing brochure',
+  room_type: 'Clean Room',
+  building_use: 'Clean room facility',
+  visual_style: 'Ultra-clean cleanroom render',
+  industry: 'Clean room / life sciences',
+  mood: 'Technical precision - client-facing',
+  output_use: 'Client presentation',
   color_temp: '4500K neutral white',
-  illumination: 'Even global illumination',
+  illumination: 'Even cleanroom lighting',
   shadows: 'Soft ambient occlusion only',
   duct_mat: 'Brushed stainless steel',
   large_pipe: 'Satin painted light grey',
   struct_steel: 'Matte galvanized finish',
   equip_casing: 'Clean white',
-  floor_mat: 'Light grey epoxy industrial',
+  floor_mat: 'Cleanroom vinyl light grey',
   camera: 'Straight elevation - orthographic',
   framing: 'Balanced - full system visible',
   aspect: '16:9',
+  extra_detail: '',
 }
 
 export const DEFAULT_PALETTE = {
@@ -41,6 +42,10 @@ export const DEFAULT_ADMIN_CONFIG = {
     background: 'opaque',
     moderation: 'auto',
     inputFidelity: 'high',
+  },
+  limits: {
+    maxPromptTokens: 700,
+    maxAttemptsPerSession: 3,
   },
   promptDefaults: {
     referenceFidelity:

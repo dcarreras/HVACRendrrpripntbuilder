@@ -13,6 +13,7 @@ const ALLOWED_INPUT_FIDELITY = ['low', 'high']
 const ALLOWED_REFERENCE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
 export const DEFAULT_IMAGE_MODEL = 'gpt-image-1.5'
+export const DEFAULT_MAX_PROMPT_TOKENS = 700
 
 function createResponse(statusCode, payload) {
   return new Response(JSON.stringify(payload), {
@@ -23,6 +24,24 @@ function createResponse(statusCode, payload) {
 
 function readAllowedValue(value, allowedValues, fallback) {
   return allowedValues.includes(value) ? value : fallback
+}
+
+function normalizePromptTokenLimit(value) {
+  const parsed = Number.parseInt(value, 10)
+
+  if (!Number.isFinite(parsed) || parsed < 200) {
+    return DEFAULT_MAX_PROMPT_TOKENS
+  }
+
+  return parsed
+}
+
+function estimatePromptTokens(value) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return 0
+  }
+
+  return Math.max(1, Math.ceil(value.trim().length / 4))
 }
 
 export function normalizeGenerationRequest(
@@ -108,6 +127,16 @@ export async function createImageResult(
   const prompt = payload?.prompt?.trim()
   if (!prompt) {
     throw new Error('Prompt is required.')
+  }
+
+  const promptTokenLimit = normalizePromptTokenLimit(
+    payload?.guardrails?.maxPromptTokens,
+  )
+  const promptTokenEstimate = estimatePromptTokens(prompt)
+  if (promptTokenEstimate > promptTokenLimit) {
+    throw new Error(
+      `Prompt exceeds the admin ceiling (${promptTokenEstimate}/${promptTokenLimit} approx. tokens).`,
+    )
   }
 
   const generation = normalizeGenerationRequest(payload?.generation, defaultModel)

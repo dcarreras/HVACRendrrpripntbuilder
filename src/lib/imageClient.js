@@ -36,6 +36,9 @@ export function getImageSize(aspect) {
  *     moderation: string
  *     inputFidelity: string
  *   }
+ *   guardrails: {
+ *     maxPromptTokens: number
+ *   }
  * }}
  */
 export function buildGenerationRequest({
@@ -59,6 +62,9 @@ export function buildGenerationRequest({
       background: adminConfig.generation.background,
       moderation: adminConfig.generation.moderation,
       inputFidelity: adminConfig.generation.inputFidelity,
+    },
+    guardrails: {
+      maxPromptTokens: adminConfig.limits.maxPromptTokens,
     },
   }
 }

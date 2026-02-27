@@ -33,7 +33,7 @@ describe('App', () => {
 
     expect(screen.getByRole('heading', { name: 'Valtria Render Studio' })).toBeVisible()
 
-    await user.click(screen.getByRole('button', { name: 'Enter as user' }))
+    await user.click(screen.getByRole('button', { name: 'Enter workspace' }))
 
     expect(screen.getByRole('heading', { name: 'Project basics' })).toBeVisible()
     expect(screen.queryByText('OpenAI generation settings')).not.toBeInTheDocument()
@@ -44,7 +44,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App storage={createStorage()} generateImage={vi.fn()} />)
 
-    await user.click(screen.getByRole('button', { name: /Admin console/i }))
+    await user.click(screen.getByRole('button', { name: 'Admin access' }))
     await user.click(screen.getByRole('button', { name: 'Enter as admin' }))
 
     expect(
@@ -53,7 +53,7 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: 'Sign out' }))
 
-    expect(screen.getByRole('button', { name: /Admin console/i })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Admin access' })).toBeVisible()
   })
 
   it('persists admin settings locally and uses them in the user generation request', async () => {
@@ -62,7 +62,7 @@ describe('App', () => {
 
     const initialRender = render(<App storage={storage} generateImage={vi.fn()} />)
 
-    await user.click(screen.getByRole('button', { name: /Admin console/i }))
+    await user.click(screen.getByRole('button', { name: 'Admin access' }))
     await user.click(screen.getByRole('button', { name: 'Enter as admin' }))
     await user.selectOptions(screen.getByLabelText('Image model'), ['gpt-image-1'])
     await user.click(screen.getByRole('button', { name: 'Save configuration' }))
@@ -76,8 +76,8 @@ describe('App', () => {
 
     render(<App storage={storage} generateImage={generateImage} />)
 
-    await user.click(screen.getByRole('button', { name: 'Enter as user' }))
-    await user.click(screen.getAllByRole('button', { name: 'Generate image' })[0])
+    await user.click(screen.getByRole('button', { name: 'Enter workspace' }))
+    await user.click(screen.getByRole('button', { name: 'Generate image' }))
 
     await waitFor(() => {
       expect(generateImage).toHaveBeenCalledTimes(1)
@@ -86,7 +86,7 @@ describe('App', () => {
     expect(generateImage.mock.calls[0][0].generation.model).toBe('gpt-image-1')
   })
 
-  it('uploads a reference image, uses the aspect ratio mapping, and renders the output image', async () => {
+  it('uploads a reference image, carries the extra detail into the prompt, and renders the output image', async () => {
     const user = userEvent.setup()
     const generateImage = vi.fn().mockResolvedValue({
       imageDataUrl: 'data:image/png;base64,CCC',
@@ -105,8 +105,12 @@ describe('App', () => {
       />,
     )
 
-    await user.click(screen.getByRole('button', { name: 'Enter as user' }))
+    await user.click(screen.getByRole('button', { name: 'Enter workspace' }))
     await user.selectOptions(screen.getByLabelText('Aspect ratio'), ['1:1'])
+    await user.type(
+      screen.getByLabelText('Do you want to add any extra detail?'),
+      'Keep the coves continuous.',
+    )
 
     const fileInput = screen.getByLabelText('Reference image file input')
     const file = new File(['reference'], 'dalux.png', { type: 'image/png' })
@@ -121,7 +125,7 @@ describe('App', () => {
       expect(screen.getByAltText('Reference preview')).toBeVisible()
     })
 
-    await user.click(screen.getAllByRole('button', { name: 'Generate image' })[0])
+    await user.click(screen.getByRole('button', { name: 'Generate image' }))
 
     await waitFor(() => {
       expect(generateImage).toHaveBeenCalledTimes(1)
@@ -132,6 +136,9 @@ describe('App', () => {
       dataUrl: 'data:image/png;base64,AAA',
       mimeType: 'image/png',
     })
+    expect(generateImage.mock.calls[0][0].prompt).toContain(
+      'Keep the coves continuous.',
+    )
     expect(screen.getByAltText('Generated HVAC render')).toBeVisible()
     expect(screen.getByRole('link', { name: 'Download image' })).toHaveAttribute(
       'href',
@@ -159,7 +166,7 @@ describe('App', () => {
       />,
     )
 
-    await user.click(screen.getByRole('button', { name: 'Enter as user' }))
+    await user.click(screen.getByRole('button', { name: 'Enter workspace' }))
 
     fireEvent.paste(screen.getByLabelText('Reference image paste zone'), {
       clipboardData: {
@@ -176,7 +183,7 @@ describe('App', () => {
       expect(screen.getByAltText('Reference preview')).toBeVisible()
     })
 
-    await user.click(screen.getAllByRole('button', { name: 'Generate image' })[0])
+    await user.click(screen.getByRole('button', { name: 'Generate image' }))
 
     await waitFor(() => {
       expect(generateImage).toHaveBeenCalledTimes(1)

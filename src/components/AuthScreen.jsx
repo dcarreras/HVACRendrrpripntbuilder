@@ -1,32 +1,40 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ValtriaLogo } from './ValtriaLogo'
 
-const ROLES = [
-  {
-    id: 'user',
-    label: 'User workspace',
+const COPY = {
+  user: {
+    badge: 'User workspace',
     title: 'Generate a render',
     description:
-      'Paste a Dalux BIM image, complete the guided brief, and download a final render.',
+      'Complete the short brief, paste the Dalux BIM image, and download the final render.',
+    submitLabel: 'Enter workspace',
+    fallbackName: 'Valtria user',
   },
-  {
-    id: 'admin',
-    label: 'Admin console',
+  admin: {
+    badge: 'Admin access',
     title: 'Configure the technical engine',
     description:
-      'Manage OpenAI defaults, prompt restrictions, and the approved HEX palette.',
+      'Manage OpenAI defaults, prompt guardrails, and the approved HEX palette.',
+    submitLabel: 'Enter as admin',
+    fallbackName: 'Valtria admin',
   },
-]
+}
 
-export function AuthScreen({ onLogin }) {
-  const [selectedRole, setSelectedRole] = useState('user')
+export function AuthScreen({ onLogin, preferredRole = 'user' }) {
+  const [selectedRole, setSelectedRole] = useState(preferredRole)
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
 
+  useEffect(() => {
+    setSelectedRole(preferredRole)
+  }, [preferredRole])
+
   const handleSubmit = (event) => {
     event.preventDefault()
+    const profile = COPY[selectedRole]
+
     onLogin(selectedRole, {
-      displayName: displayName.trim() || 'Valtria user',
+      displayName: displayName.trim() || profile.fallbackName,
       email: email.trim(),
     })
   }
@@ -52,23 +60,12 @@ export function AuthScreen({ onLogin }) {
       <main className="auth-layout">
         <section className="card card--hvac auth-card">
           <div className="card__body auth-card__body">
-            <div className="auth-grid" role="radiogroup" aria-label="Select access role">
-              {ROLES.map((role) => {
-                const active = role.id === selectedRole
-                return (
-                  <button
-                    key={role.id}
-                    type="button"
-                    className={`auth-role ${active ? 'auth-role--active' : ''}`.trim()}
-                    onClick={() => setSelectedRole(role.id)}
-                    aria-pressed={active}
-                  >
-                    <span className="t-label">{role.label}</span>
-                    <strong>{role.title}</strong>
-                    <span className="t-small">{role.description}</span>
-                  </button>
-                )
-              })}
+            <div className="auth-panel">
+              <span className="badge badge--accent">{COPY[selectedRole].badge}</span>
+              <strong className="auth-panel__title">{COPY[selectedRole].title}</strong>
+              <p className="t-small auth-panel__copy">
+                {COPY[selectedRole].description}
+              </p>
             </div>
 
             <form className="auth-form" onSubmit={handleSubmit}>
@@ -99,9 +96,37 @@ export function AuthScreen({ onLogin }) {
               </div>
 
               <button type="submit" className="btn btn-primary">
-                {selectedRole === 'admin' ? 'Enter as admin' : 'Enter as user'}
+                {COPY[selectedRole].submitLabel}
               </button>
             </form>
+
+            <div className="auth-switch">
+              {selectedRole === 'admin' ? (
+                <>
+                  <span className="t-small">Return to the normal user flow.</span>
+                  <button
+                    type="button"
+                    className="btn btn-link"
+                    onClick={() => setSelectedRole('user')}
+                  >
+                    Back to user access
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="t-small">
+                    Admin controls stay tucked away for technical staff only.
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-link"
+                    onClick={() => setSelectedRole('admin')}
+                  >
+                    Admin access
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </section>
       </main>

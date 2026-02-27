@@ -83,6 +83,25 @@ describe('createImageResult', () => {
       revisedPrompt: 'revised',
     })
   })
+
+  it('rejects prompts that exceed the admin token ceiling', async () => {
+    await expect(
+      createImageResult(
+        {
+          images: {
+            generate: vi.fn(),
+            edit: vi.fn(),
+          },
+        },
+        {
+          prompt: 'A'.repeat(1200),
+          guardrails: {
+            maxPromptTokens: 200,
+          },
+        },
+      ),
+    ).rejects.toThrow('Prompt exceeds the admin ceiling')
+  })
 })
 
 describe('handler', () => {

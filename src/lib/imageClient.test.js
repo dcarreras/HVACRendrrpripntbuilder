@@ -43,6 +43,9 @@ describe('buildGenerationRequest', () => {
         moderation: DEFAULT_ADMIN_CONFIG.generation.moderation,
         inputFidelity: DEFAULT_ADMIN_CONFIG.generation.inputFidelity,
       },
+      guardrails: {
+        maxPromptTokens: DEFAULT_ADMIN_CONFIG.limits.maxPromptTokens,
+      },
     })
   })
 })

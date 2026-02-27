@@ -7,6 +7,7 @@ export function FieldControl({
   type = 'select',
   placeholder = '',
   hint = '',
+  rows = 4,
 }) {
   return (
     <div className="field-control">
@@ -26,6 +27,15 @@ export function FieldControl({
             </option>
           ))}
         </select>
+      ) : type === 'textarea' ? (
+        <textarea
+          id={id}
+          className="input input--textarea"
+          value={value}
+          rows={rows}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+        />
       ) : (
         <input
           id={id}

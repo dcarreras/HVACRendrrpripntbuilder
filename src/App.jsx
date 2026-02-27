@@ -17,15 +17,17 @@ import {
   buildGenerationRequest,
   generateImageRequest,
 } from './lib/imageClient'
-import { buildPrompt } from './lib/promptBuilder'
+import { buildPrompt, estimatePromptTokens } from './lib/promptBuilder'
 import { readFileAsReferenceImage } from './lib/referenceImage'
 import {
   clearSession,
   DEFAULT_SESSION,
   loadAdminConfig,
+  loadAttemptCount,
   loadSession,
   mergeAdminConfig,
   saveAdminConfig,
+  saveAttemptCount,
   saveSession,
 } from './lib/storage'
 
@@ -52,8 +54,8 @@ const USER_STEPS = [
   },
   {
     id: 'generate',
-    title: 'Generate and download',
-    help: 'Runs the server-side OpenAI workflow and exposes the final output image.',
+    title: 'Final detail and generate',
+    help: 'Adds one last optional note, applies admin guardrails, and generates the final output image.',
   },
 ]
 
@@ -124,6 +126,7 @@ function App({
     loadAdminConfig(storage),
   )
   const [adminDraft, setAdminDraft] = useState(() => loadAdminConfig(storage))
+  const [attemptCount, setAttemptCount] = useState(() => loadAttemptCount(storage))
   const [adminNotice, setAdminNotice] = useState('')
   const [showAdminPreview, setShowAdminPreview] = useState(false)
   const [referenceImage, setReferenceImage] = useState(null)
@@ -142,6 +145,20 @@ function App({
     () => buildPrompt(DEFAULT_FIELDS, adminDraft),
     [adminDraft],
   )
+  const promptTokenEstimate = useMemo(
+    () => estimatePromptTokens(prompt),
+    [prompt],
+  )
+  const maxPromptTokens = savedAdminConfig.limits.maxPromptTokens
+  const maxAttempts = savedAdminConfig.limits.maxAttemptsPerSession
+  const attemptsRemaining = Math.max(0, maxAttempts - attemptCount)
+  const isPromptOverLimit = promptTokenEstimate > maxPromptTokens
+  const isAttemptLimitReached = attemptsRemaining <= 0
+  const generationBlockReason = isPromptOverLimit
+    ? `The prompt is above the admin ceiling (${promptTokenEstimate}/${maxPromptTokens} approx. tokens). Shorten the extra detail or ask admin to increase the limit.`
+    : isAttemptLimitReached
+      ? `The render attempt cap for this browser has been reached (${maxAttempts}/${maxAttempts}).`
+      : ''
 
   const resetUserWorkspace = () => {
     setFields(cloneDefaults())
@@ -211,8 +228,17 @@ function App({
 
   const handleGenerateImage = async () => {
     scrollToStep('generate')
+
+    if (generationBlockReason) {
+      return
+    }
+
     setGenerationError('')
     setIsGenerating(true)
+
+    const nextAttemptCount = attemptCount + 1
+    setAttemptCount(nextAttemptCount)
+    saveAttemptCount(storage, nextAttemptCount)
 
     try {
       const request = buildGenerationRequest({
@@ -278,6 +304,21 @@ function App({
           }))
           setAdminNotice('')
         }}
+        onLimitChange={(key, value) => {
+          const parsed = Number.parseInt(value, 10)
+          if (!Number.isFinite(parsed)) {
+            return
+          }
+
+          setAdminDraft((previous) => ({
+            ...previous,
+            limits: {
+              ...previous.limits,
+              [key]: parsed,
+            },
+          }))
+          setAdminNotice('')
+        }}
         onPromptDefaultsChange={(key, value) => {
           setAdminDraft((previous) => ({
             ...previous,
@@ -314,12 +355,9 @@ function App({
       steps={USER_STEPS}
       activeStep={activeStep}
       onStepClick={scrollToStep}
-      onPrimaryAction={handleGenerateImage}
-      primaryActionLabel="Generate image"
-      primaryActionDisabled={isGenerating}
       headerEyebrow="User workspace"
       headerTitle="Generate a Valtria render"
-      headerSubtitle="Technical parameters are managed by admin. Complete the brief, paste the Dalux BIM image, and generate the final render."
+      headerSubtitle="A shortened guided brief for cleanroom renders. The technical guardrails stay under admin control."
       headerActions={userHeaderActions}
     >
       <StepCard
@@ -333,7 +371,7 @@ function App({
         onFocusStep={setActiveStep}
       >
         <div className="step-block">
-          <p className="t-section">Quick presets</p>
+          <p className="t-section">Cleanroom presets</p>
           <PresetStrip
             presets={PRESETS}
             fields={fields}
@@ -360,24 +398,6 @@ function App({
           options={OPTIONS.room_type}
           onChange={(value) =>
             setFields((previous) => ({ ...previous, room_type: value }))
-          }
-        />
-        <FieldControl
-          id="building_use"
-          label="Building use"
-          value={fields.building_use}
-          options={OPTIONS.building_use}
-          onChange={(value) =>
-            setFields((previous) => ({ ...previous, building_use: value }))
-          }
-        />
-        <FieldControl
-          id="industry"
-          label="Industry"
-          value={fields.industry}
-          options={OPTIONS.industry}
-          onChange={(value) =>
-            setFields((previous) => ({ ...previous, industry: value }))
           }
         />
         <FieldControl
@@ -417,33 +437,6 @@ function App({
           options={OPTIONS.mood}
           onChange={(value) =>
             setFields((previous) => ({ ...previous, mood: value }))
-          }
-        />
-        <FieldControl
-          id="color_temp"
-          label="Color temperature"
-          value={fields.color_temp}
-          options={OPTIONS.color_temp}
-          onChange={(value) =>
-            setFields((previous) => ({ ...previous, color_temp: value }))
-          }
-        />
-        <FieldControl
-          id="illumination"
-          label="Illumination"
-          value={fields.illumination}
-          options={OPTIONS.illumination}
-          onChange={(value) =>
-            setFields((previous) => ({ ...previous, illumination: value }))
-          }
-        />
-        <FieldControl
-          id="shadows"
-          label="Shadows"
-          value={fields.shadows}
-          options={OPTIONS.shadows}
-          onChange={(value) =>
-            setFields((previous) => ({ ...previous, shadows: value }))
           }
         />
         <FieldControl
@@ -495,24 +488,6 @@ function App({
           }
         />
         <FieldControl
-          id="large_pipe"
-          label="Main pipe material"
-          value={fields.large_pipe}
-          options={OPTIONS.large_pipe}
-          onChange={(value) =>
-            setFields((previous) => ({ ...previous, large_pipe: value }))
-          }
-        />
-        <FieldControl
-          id="struct_steel"
-          label="Structural steel"
-          value={fields.struct_steel}
-          options={OPTIONS.struct_steel}
-          onChange={(value) =>
-            setFields((previous) => ({ ...previous, struct_steel: value }))
-          }
-        />
-        <FieldControl
           id="equip_casing"
           label="Equipment casing"
           value={fields.equip_casing}
@@ -553,18 +528,35 @@ function App({
         stepRef={registerStepRef('generate')}
         stepId="generate"
         stepNumber={5}
-        title="Generate and download"
+        title="Final detail and generate"
         whatThisAffects={USER_STEPS[4].help}
         isCurrent={activeStep === 'generate'}
         isCompleted={false}
         onFocusStep={setActiveStep}
       >
+        <FieldControl
+          id="extra_detail"
+          label="Do you want to add any extra detail?"
+          type="textarea"
+          value={fields.extra_detail}
+          rows={4}
+          onChange={(value) =>
+            setFields((previous) => ({ ...previous, extra_detail: value }))
+          }
+          placeholder="Example: keep the room envelope ultra-clean and add subtle ceiling coves."
+          hint={`Optional. Current prompt budget: ${promptTokenEstimate} / ${maxPromptTokens} approximate tokens.`}
+        />
         <ImageResultPanel
           isGenerating={isGenerating}
           error={generationError}
           imageResult={imageResult}
           projectName={fields.project_name}
           onGenerate={handleGenerateImage}
+          tokenEstimate={promptTokenEstimate}
+          maxPromptTokens={maxPromptTokens}
+          attemptCount={attemptCount}
+          maxAttempts={maxAttempts}
+          blockReason={generationBlockReason}
         />
       </StepCard>
     </WizardLayout>

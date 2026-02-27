@@ -10,6 +10,7 @@ export function AdminConsole({
   showPreview,
   notice,
   onGenerationChange,
+  onLimitChange,
   onPromptDefaultsChange,
   onPaletteChange,
   onSave,
@@ -82,6 +83,28 @@ export function AdminConsole({
               value={config.generation.inputFidelity}
               options={options.admin_input_fidelity}
               onChange={(value) => onGenerationChange('inputFidelity', value)}
+            />
+          </div>
+        </section>
+
+        <section className="card card--hvac">
+          <header className="card__header">Usage guardrails</header>
+          <div className="card__body">
+            <FieldControl
+              id="admin-max-prompt-tokens"
+              label="Prompt token ceiling"
+              type="number"
+              value={config.limits.maxPromptTokens}
+              onChange={(value) => onLimitChange('maxPromptTokens', value)}
+              hint="Approximate prompt-token budget enforced before each image request."
+            />
+            <FieldControl
+              id="admin-max-attempts"
+              label="Max attempts per browser"
+              type="number"
+              value={config.limits.maxAttemptsPerSession}
+              onChange={(value) => onLimitChange('maxAttemptsPerSession', value)}
+              hint="After this cap is reached, the user must wait for a new session or for admin to raise the limit."
             />
           </div>
         </section>
