@@ -95,13 +95,15 @@ describe('handler', () => {
   it('returns 400 for invalid json payloads', async () => {
     process.env.OPENAI_API_KEY = 'test-key'
 
-    const response = await handler({
-      httpMethod: 'POST',
-      body: '{invalid',
-    })
+    const response = await handler(
+      new Request('https://example.com/.netlify/functions/generate-image', {
+        method: 'POST',
+        body: '{invalid',
+      }),
+    )
 
-    expect(response.statusCode).toBe(400)
-    expect(JSON.parse(response.body).error).toBe(
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toBe(
       'Request body must be valid JSON.',
     )
   })
@@ -109,13 +111,15 @@ describe('handler', () => {
   it('returns 500 when the OpenAI key is missing', async () => {
     delete process.env.OPENAI_API_KEY
 
-    const response = await handler({
-      httpMethod: 'POST',
-      body: '{}',
-    })
+    const response = await handler(
+      new Request('https://example.com/.netlify/functions/generate-image', {
+        method: 'POST',
+        body: '{}',
+      }),
+    )
 
-    expect(response.statusCode).toBe(500)
-    expect(JSON.parse(response.body).error).toBe(
+    expect(response.status).toBe(500)
+    expect((await response.json()).error).toBe(
       'OPENAI_API_KEY is not configured.',
     )
   })

@@ -15,11 +15,10 @@ const ALLOWED_REFERENCE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 export const DEFAULT_IMAGE_MODEL = 'gpt-image-1.5'
 
 function createResponse(statusCode, payload) {
-  return {
-    statusCode,
+  return new Response(JSON.stringify(payload), {
+    status: statusCode,
     headers: JSON_HEADERS,
-    body: JSON.stringify(payload),
-  }
+  })
 }
 
 function readAllowedValue(value, allowedValues, fallback) {
@@ -159,8 +158,8 @@ export async function createImageResult(
   }
 }
 
-export async function handler(event) {
-  if (event.httpMethod !== 'POST') {
+export async function handler(request) {
+  if (request.method !== 'POST') {
     return createResponse(405, { error: 'Method not allowed.' })
   }
 
@@ -170,7 +169,7 @@ export async function handler(event) {
 
   let payload
   try {
-    payload = JSON.parse(event.body || '{}')
+    payload = JSON.parse((await request.text()) || '{}')
   } catch {
     return createResponse(400, { error: 'Request body must be valid JSON.' })
   }
