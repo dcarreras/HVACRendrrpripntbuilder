@@ -22,6 +22,8 @@ describe('buildGenerationRequest', () => {
       prompt: 'test prompt',
       aspect: '1:1',
       adminConfig: DEFAULT_ADMIN_CONFIG,
+      projectId: 'project-1',
+      systemType: 'Clean Room',
       referenceImage: {
         dataUrl: 'data:image/png;base64,AAA',
         mimeType: 'image/png',
@@ -31,6 +33,8 @@ describe('buildGenerationRequest', () => {
 
     expect(payload).toEqual({
       prompt: 'test prompt',
+      projectId: 'project-1',
+      systemType: 'Clean Room',
       referenceImage: {
         dataUrl: 'data:image/png;base64,AAA',
         mimeType: 'image/png',
@@ -51,7 +55,7 @@ describe('buildGenerationRequest', () => {
 })
 
 describe('generateImageRequest', () => {
-  it('calls the Netlify function and returns the parsed payload', async () => {
+  it('calls the Netlify function with the Supabase bearer token and returns the parsed payload', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({
@@ -60,7 +64,14 @@ describe('generateImageRequest', () => {
     })
 
     const result = await generateImageRequest(
-      { prompt: 'test', referenceImage: null, generation: {} },
+      {
+        prompt: 'test',
+        projectId: 'project-1',
+        systemType: 'Clean Room',
+        referenceImage: null,
+        generation: {},
+      },
+      'token-123',
       fetchMock,
     )
 
@@ -68,9 +79,12 @@ describe('generateImageRequest', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Authorization: 'Bearer token-123',
       },
       body: JSON.stringify({
         prompt: 'test',
+        projectId: 'project-1',
+        systemType: 'Clean Room',
         referenceImage: null,
         generation: {},
       }),
@@ -88,7 +102,14 @@ describe('generateImageRequest', () => {
 
     await expect(
       generateImageRequest(
-        { prompt: 'test', referenceImage: null, generation: {} },
+        {
+          prompt: 'test',
+          projectId: 'project-1',
+          systemType: 'Clean Room',
+          referenceImage: null,
+          generation: {},
+        },
+        'token-123',
         fetchMock,
       ),
     ).rejects.toThrow('OpenAI request failed.')

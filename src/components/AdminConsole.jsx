@@ -2,22 +2,83 @@ import { FieldControl } from './FieldControl'
 import { PaletteEditor } from './PaletteEditor'
 import { ValtriaLogo } from './ValtriaLogo'
 
+function getUserLabel(user) {
+  return (
+    user?.user_metadata?.displayName ||
+    user?.user_metadata?.display_name ||
+    user?.user_metadata?.full_name ||
+    user?.email ||
+    'Valtria admin'
+  )
+}
+
+function formatCurrency(value) {
+  const amount = Number.parseFloat(value)
+
+  if (!Number.isFinite(amount)) {
+    return '$0.00'
+  }
+
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amount)
+}
+
+function formatDate(value) {
+  if (!value) {
+    return 'Unknown'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return 'Unknown'
+  }
+
+  return date.toLocaleString()
+}
+
+function formatUserId(userId) {
+  if (!userId) {
+    return 'Unknown'
+  }
+
+  if (userId.length <= 12) {
+    return userId
+  }
+
+  return `${userId.slice(0, 8)}...`
+}
+
 export function AdminConsole({
-  session,
+  user,
   config,
   options,
   previewPrompt,
   showPreview,
   notice,
+  projects,
+  selectedProjectId,
+  renderHistory,
+  projectCostTotal,
+  isLoadingProjects,
+  isLoadingHistory,
+  isSaving,
   onGenerationChange,
   onLimitChange,
   onPromptDefaultsChange,
   onPaletteChange,
+  onProjectChange,
   onSave,
   onReset,
   onTogglePreview,
   onLogout,
 }) {
+  const hasProjects = projects.length > 0
+  const selectedProject = projects.find((project) => project.id === selectedProjectId)
+  const overBudget =
+    projectCostTotal > Number.parseFloat(config.limits.budgetLimitUsd || 0)
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -37,7 +98,7 @@ export function AdminConsole({
         <div className="app-header__actions">
           <div className="session-meta">
             <span className="badge badge--accent">Admin</span>
-            <p className="t-small">{session.displayName || 'Valtria admin'}</p>
+            <p className="t-small">{getUserLabel(user)}</p>
           </div>
           <button type="button" className="btn btn-ghost" onClick={onLogout}>
             Sign out
@@ -46,6 +107,45 @@ export function AdminConsole({
       </header>
 
       <main className="admin-layout">
+        <section className="card card--hvac">
+          <header className="card__header">Project scope</header>
+          <div className="card__body">
+            <div className="field-control">
+              <label className="label" htmlFor="admin-project-select">
+                Project
+              </label>
+              <select
+                id="admin-project-select"
+                className="input"
+                value={selectedProjectId}
+                onChange={(event) => onProjectChange(event.target.value)}
+                disabled={!hasProjects}
+              >
+                {hasProjects ? null : <option value="">No projects yet</option>}
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name} - {project.company}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {isLoadingProjects ? (
+              <p className="t-small">Loading the project list from Supabase.</p>
+            ) : null}
+            {!hasProjects ? (
+              <p className="t-small">
+                Projects appear here after a user creates one from the main
+                workspace.
+              </p>
+            ) : null}
+            {selectedProject ? (
+              <p className="t-small">
+                Editing configuration for {selectedProject.name} ({selectedProject.company}).
+              </p>
+            ) : null}
+          </div>
+        </section>
+
         <section className="card card--hvac">
           <header className="card__header">OpenAI generation settings</header>
           <div className="card__body">
@@ -106,6 +206,14 @@ export function AdminConsole({
               onChange={(value) => onLimitChange('maxAttemptsPerSession', value)}
               hint="After this cap is reached, the user must wait for a new session or for admin to raise the limit."
             />
+            <FieldControl
+              id="admin-budget-limit"
+              label="Budget limit (USD)"
+              type="number"
+              value={config.limits.budgetLimitUsd}
+              onChange={(value) => onLimitChange('budgetLimitUsd', value)}
+              hint="Passive warning threshold for the selected project."
+            />
           </div>
         </section>
 
@@ -141,8 +249,13 @@ export function AdminConsole({
           <header className="card__header">Admin actions</header>
           <div className="card__body admin-actions">
             <div className="admin-actions__buttons">
-              <button type="button" className="btn btn-primary" onClick={onSave}>
-                Save configuration
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={onSave}
+                disabled={!selectedProjectId || isSaving}
+              >
+                {isSaving ? 'Saving...' : 'Save configuration'}
               </button>
               <button type="button" className="btn btn-ghost" onClick={onReset}>
                 Reset to defaults
@@ -155,6 +268,53 @@ export function AdminConsole({
             {showPreview ? (
               <pre className="prompt-output t-code">{previewPrompt}</pre>
             ) : null}
+          </div>
+        </section>
+
+        <section className="card">
+          <header className="card__header">Historial de renders</header>
+          <div className="card__body">
+            <p className="t-small">
+              Total project cost: {formatCurrency(projectCostTotal)} /{' '}
+              {formatCurrency(config.limits.budgetLimitUsd)}
+            </p>
+            {overBudget ? (
+              <p className="image-panel__warning">
+                The selected project is above the configured budget limit.
+              </p>
+            ) : null}
+            {!selectedProjectId ? (
+              <p className="t-small">
+                Select a project to load its render history.
+              </p>
+            ) : isLoadingHistory ? (
+              <p className="t-small">Loading render history from Supabase.</p>
+            ) : renderHistory.length ? (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Usuario</th>
+                    <th>Sistema</th>
+                    <th>Coste</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {renderHistory.map((render) => (
+                    <tr key={render.id}>
+                      <td>{formatDate(render.created_at)}</td>
+                      <td>{formatUserId(render.user_id)}</td>
+                      <td>{render.system_type || 'Unknown'}</td>
+                      <td>{formatCurrency(render.cost_usd)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="t-small">
+                No renders have been saved for this project yet.
+              </p>
+            )}
           </div>
         </section>
       </main>

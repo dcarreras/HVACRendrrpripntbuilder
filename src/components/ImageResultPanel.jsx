@@ -9,6 +9,24 @@ function createDownloadName(projectName) {
   return `${slug || 'hvac-render'}.png`
 }
 
+function createSavedRenderName(projectName, renderId) {
+  const baseName = createDownloadName(projectName).replace(/\.png$/i, '')
+  return `${baseName}-${renderId || 'saved-render'}.png`
+}
+
+function formatDate(value) {
+  if (!value) {
+    return 'Unknown'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return 'Unknown'
+  }
+
+  return date.toLocaleString()
+}
+
 export function ImageResultPanel({
   isGenerating,
   error,
@@ -20,6 +38,7 @@ export function ImageResultPanel({
   attemptCount,
   maxAttempts,
   blockReason = '',
+  recentRenders = [],
 }) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [completedSeconds, setCompletedSeconds] = useState(0)
@@ -149,6 +168,45 @@ export function ImageResultPanel({
           image to preview and download the final render here.
         </div>
       )}
+
+      <div className="step-block">
+        <p className="t-section">Saved renders</p>
+        {recentRenders.length ? (
+          <div>
+            {recentRenders.map((render) => (
+              <article key={render.id} className="card">
+                <div className="card__body">
+                  {render.imageUrl ? (
+                    <img
+                      src={render.imageUrl}
+                      alt={`Saved ${render.system_type || 'HVAC'} render`}
+                      className="image-panel__image"
+                    />
+                  ) : (
+                    <p className="t-small">Preview unavailable.</p>
+                  )}
+                  <p className="t-small">{formatDate(render.created_at)}</p>
+                  <p className="t-small">{render.system_type || 'Unknown system'}</p>
+                  {render.imageUrl ? (
+                    <a
+                      className="btn btn-ghost"
+                      href={render.imageUrl}
+                      download={createSavedRenderName(projectName, render.id)}
+                    >
+                      Download
+                    </a>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="prompt-placeholder t-small">
+            The latest 10 saved renders for the current user will appear here
+            after the first successful generation.
+          </div>
+        )}
+      </div>
     </div>
   )
 }

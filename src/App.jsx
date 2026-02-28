@@ -3,14 +3,11 @@ import { AdminConsole } from './components/AdminConsole'
 import { AuthScreen } from './components/AuthScreen'
 import { FieldControl } from './components/FieldControl'
 import { ImageResultPanel } from './components/ImageResultPanel'
-import { ReferenceImageInput } from './components/ReferenceImageInput'
 import { PresetStrip } from './components/PresetStrip'
+import { ReferenceImageInput } from './components/ReferenceImageInput'
 import { StepCard } from './components/StepCard'
 import { WizardLayout } from './components/WizardLayout'
-import {
-  DEFAULT_ADMIN_CONFIG,
-  DEFAULT_FIELDS,
-} from './data/defaults'
+import { DEFAULT_ADMIN_CONFIG, DEFAULT_FIELDS } from './data/defaults'
 import { OPTIONS } from './data/options'
 import { PRESETS } from './data/presets'
 import {
@@ -19,16 +16,17 @@ import {
 } from './lib/imageClient'
 import { buildPrompt, estimatePromptTokens } from './lib/promptBuilder'
 import { readFileAsReferenceImage } from './lib/referenceImage'
+import { supabase } from './lib/supabaseClient'
 import {
-  clearSession,
-  DEFAULT_SESSION,
-  loadAdminConfig,
+  ensureProject,
+  getProjectConfig,
+  getProjectRenderHistory,
+  getRenders,
+  listProjects,
   loadAttemptCount,
-  loadSession,
   mergeAdminConfig,
-  saveAdminConfig,
   saveAttemptCount,
-  saveSession,
+  saveProjectConfig,
 } from './lib/storage'
 
 const USER_STEPS = [
@@ -59,12 +57,23 @@ const USER_STEPS = [
   },
 ]
 
-function getDefaultStorage() {
+const DEFAULT_DATA_API = {
+  ensureProject,
+  getProjectConfig,
+  saveProjectConfig,
+  getRenders,
+  listProjects,
+  getProjectRenderHistory,
+  loadAttemptCount,
+  saveAttemptCount,
+}
+
+function getDefaultAttemptStorage() {
   if (typeof window === 'undefined') {
     return undefined
   }
 
-  return window.localStorage
+  return window.sessionStorage
 }
 
 function createObserver(onActive) {
@@ -106,41 +115,89 @@ function cloneDefaults() {
   }
 }
 
-function createSession(role, profile) {
+function isAdminUser(user) {
+  return user?.user_metadata?.role === 'admin'
+}
+
+function getUserLabel(user) {
+  return (
+    user?.user_metadata?.displayName ||
+    user?.user_metadata?.display_name ||
+    user?.user_metadata?.full_name ||
+    user?.email ||
+    'Valtria user'
+  )
+}
+
+function createSessionView(user) {
+  if (!user) {
+    return {
+      role: null,
+      isAuthenticated: false,
+      displayName: '',
+      email: '',
+    }
+  }
+
   return {
-    role,
+    role: isAdminUser(user) ? 'admin' : 'user',
     isAuthenticated: true,
-    displayName: profile.displayName,
-    email: profile.email,
+    displayName: getUserLabel(user),
+    email: user.email || '',
   }
 }
 
 function App({
-  storage = getDefaultStorage(),
+  supabaseClient = supabase,
+  dataApi = DEFAULT_DATA_API,
   generateImage = generateImageRequest,
   readReferenceFile = readFileAsReferenceImage,
+  attemptStorage = getDefaultAttemptStorage(),
 }) {
-  const [session, setSession] = useState(() => loadSession(storage))
+  const [isAuthReady, setIsAuthReady] = useState(false)
+  const [authSession, setAuthSession] = useState(null)
+  const [authMessage, setAuthMessage] = useState('')
+  const [authAction, setAuthAction] = useState('')
   const [fields, setFields] = useState(() => cloneDefaults())
+  const [projectCompany, setProjectCompany] = useState('')
+  const [userProjectId, setUserProjectId] = useState('')
+  const [isUserProjectLoading, setIsUserProjectLoading] = useState(false)
+  const [projectLoadError, setProjectLoadError] = useState('')
   const [savedAdminConfig, setSavedAdminConfig] = useState(() =>
-    loadAdminConfig(storage),
+    mergeAdminConfig(DEFAULT_ADMIN_CONFIG),
   )
-  const [adminDraft, setAdminDraft] = useState(() => loadAdminConfig(storage))
-  const [attemptCount, setAttemptCount] = useState(() => loadAttemptCount(storage))
+  const [adminDraft, setAdminDraft] = useState(() =>
+    mergeAdminConfig(DEFAULT_ADMIN_CONFIG),
+  )
+  const [attemptCount, setAttemptCount] = useState(() =>
+    dataApi.loadAttemptCount?.(attemptStorage) || 0,
+  )
   const [adminNotice, setAdminNotice] = useState('')
   const [showAdminPreview, setShowAdminPreview] = useState(false)
   const [referenceImage, setReferenceImage] = useState(null)
   const [imageResult, setImageResult] = useState(null)
+  const [recentRenders, setRecentRenders] = useState([])
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationError, setGenerationError] = useState('')
   const [activeStep, setActiveStep] = useState(USER_STEPS[0].id)
+  const [adminProjects, setAdminProjects] = useState([])
+  const [selectedAdminProjectId, setSelectedAdminProjectId] = useState('')
+  const [renderHistory, setRenderHistory] = useState([])
+  const [isLoadingAdminProjects, setIsLoadingAdminProjects] = useState(false)
+  const [isLoadingAdminHistory, setIsLoadingAdminHistory] = useState(false)
+  const [isSavingAdmin, setIsSavingAdmin] = useState(false)
   const stepRefs = useRef({})
+
+  const user = authSession?.user || null
+  const userId = user?.id || ''
+  const sessionView = useMemo(() => createSessionView(user), [user])
+  const currentIsAdmin = isAdminUser(user)
+  const authAccessToken = authSession?.access_token || ''
 
   const prompt = useMemo(
     () => buildPrompt(fields, savedAdminConfig),
     [fields, savedAdminConfig],
   )
-
   const adminPreviewPrompt = useMemo(
     () => buildPrompt(DEFAULT_FIELDS, adminDraft),
     [adminDraft],
@@ -157,16 +214,34 @@ function App({
   const generationBlockReason = isPromptOverLimit
     ? `The prompt is above the admin ceiling (${promptTokenEstimate}/${maxPromptTokens} approx. tokens). Shorten the extra detail or ask admin to increase the limit.`
     : isAttemptLimitReached
-      ? `The render attempt cap for this browser has been reached (${maxAttempts}/${maxAttempts}).`
+      ? `The render attempt cap for this browser session has been reached (${maxAttempts}/${maxAttempts}).`
       : ''
+  const projectCostTotal = useMemo(
+    () =>
+      renderHistory.reduce((total, render) => {
+        const cost = Number.parseFloat(render.cost_usd)
+        return total + (Number.isFinite(cost) ? cost : 0)
+      }, 0),
+    [renderHistory],
+  )
+  const projectCompanyHint = projectLoadError
+    ? projectLoadError
+    : isUserProjectLoading
+      ? 'Loading project settings from Supabase.'
+      : 'Required to save renders and load project-specific admin settings.'
 
   const resetUserWorkspace = () => {
     setFields(cloneDefaults())
+    setProjectCompany('')
+    setUserProjectId('')
+    setProjectLoadError('')
     setReferenceImage(null)
     setImageResult(null)
+    setRecentRenders([])
     setGenerationError('')
     setIsGenerating(false)
     setActiveStep(USER_STEPS[0].id)
+    setSavedAdminConfig(mergeAdminConfig(DEFAULT_ADMIN_CONFIG))
   }
 
   const registerStepRef = (stepId) => (node) => {
@@ -184,7 +259,48 @@ function App({
   }
 
   useEffect(() => {
-    if (session.role !== 'user') {
+    let isMounted = true
+
+    async function loadSession() {
+      const { data, error } = await supabaseClient.auth.getSession()
+      if (!isMounted) {
+        return
+      }
+
+      if (error) {
+        setAuthMessage(error.message)
+      }
+
+      setAuthSession(data?.session || null)
+      setIsAuthReady(true)
+    }
+
+    loadSession()
+
+    const {
+      data: { subscription },
+    } = supabaseClient.auth.onAuthStateChange((_event, nextSession) => {
+      if (!isMounted) {
+        return
+      }
+
+      setAuthSession(nextSession || null)
+      setIsAuthReady(true)
+      setAuthAction('')
+
+      if (nextSession?.user) {
+        setAuthMessage('')
+      }
+    })
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [supabaseClient])
+
+  useEffect(() => {
+    if (sessionView.role !== 'user') {
       return undefined
     }
 
@@ -200,28 +316,274 @@ function App({
     nodes.forEach((node) => observer.observe(node))
 
     return () => observer.disconnect()
-  }, [session.role])
+  }, [sessionView.role])
 
-  const handleLogin = (role, profile) => {
-    const nextSession = createSession(role, profile)
-    setSession(nextSession)
-    saveSession(storage, nextSession)
-    setAdminNotice('')
-    setShowAdminPreview(false)
+  useEffect(() => {
+    if (!userId || currentIsAdmin) {
+      setUserProjectId('')
+      setProjectLoadError('')
+      return undefined
+    }
 
-    if (role === 'admin') {
-      setAdminDraft(savedAdminConfig)
+    const projectName = fields.project_name.trim()
+    const company = projectCompany.trim()
+
+    if (!projectName || !company) {
+      setUserProjectId('')
+      setSavedAdminConfig(mergeAdminConfig(DEFAULT_ADMIN_CONFIG))
+      return undefined
+    }
+
+    let isCurrent = true
+    const timer = window.setTimeout(async () => {
+      setIsUserProjectLoading(true)
+      setProjectLoadError('')
+
+      try {
+        const project = await dataApi.ensureProject({
+          name: projectName,
+          company,
+        })
+        if (!isCurrent) {
+          return
+        }
+
+        const config = await dataApi.getProjectConfig(project.id)
+        if (!isCurrent) {
+          return
+        }
+
+        setUserProjectId(project.id)
+        setSavedAdminConfig(config)
+      } catch (error) {
+        if (!isCurrent) {
+          return
+        }
+
+        setProjectLoadError(getErrorMessage(error))
+      } finally {
+        if (isCurrent) {
+          setIsUserProjectLoading(false)
+        }
+      }
+    }, 300)
+
+    return () => {
+      isCurrent = false
+      window.clearTimeout(timer)
+    }
+  }, [
+    currentIsAdmin,
+    dataApi,
+    fields.project_name,
+    projectCompany,
+    userId,
+  ])
+
+  useEffect(() => {
+    if (!userId || currentIsAdmin) {
+      setRecentRenders([])
+      return undefined
+    }
+
+    let isCurrent = true
+
+    async function loadRecentRenders() {
+      try {
+        const renders = await dataApi.getRenders({
+          userId,
+        })
+        if (!isCurrent) {
+          return
+        }
+
+        setRecentRenders(renders)
+      } catch (error) {
+        if (!isCurrent) {
+          return
+        }
+
+        setGenerationError(getErrorMessage(error))
+      }
+    }
+
+    loadRecentRenders()
+
+    return () => {
+      isCurrent = false
+    }
+  }, [currentIsAdmin, dataApi, userId])
+
+  useEffect(() => {
+    if (!userId || !currentIsAdmin) {
+      setAdminProjects([])
+      setSelectedAdminProjectId('')
+      return undefined
+    }
+
+    let isCurrent = true
+
+    async function loadProjects() {
+      setIsLoadingAdminProjects(true)
+
+      try {
+        const projects = await dataApi.listProjects()
+        if (!isCurrent) {
+          return
+        }
+
+        setAdminProjects(projects)
+        setSelectedAdminProjectId((previous) => {
+          if (previous && projects.some((project) => project.id === previous)) {
+            return previous
+          }
+
+          return projects[0]?.id || ''
+        })
+      } catch (error) {
+        if (!isCurrent) {
+          return
+        }
+
+        setAdminNotice(getErrorMessage(error))
+      } finally {
+        if (isCurrent) {
+          setIsLoadingAdminProjects(false)
+        }
+      }
+    }
+
+    loadProjects()
+
+    return () => {
+      isCurrent = false
+    }
+  }, [currentIsAdmin, dataApi, userId])
+
+  useEffect(() => {
+    if (!userId || !currentIsAdmin || !selectedAdminProjectId) {
+      setAdminDraft(mergeAdminConfig(DEFAULT_ADMIN_CONFIG))
+      setRenderHistory([])
+      return undefined
+    }
+
+    let isCurrent = true
+
+    async function loadAdminProjectData() {
+      setIsLoadingAdminHistory(true)
+      setAdminNotice('')
+
+      try {
+        const [config, history] = await Promise.all([
+          dataApi.getProjectConfig(selectedAdminProjectId),
+          dataApi.getProjectRenderHistory({
+            projectId: selectedAdminProjectId,
+          }),
+        ])
+
+        if (!isCurrent) {
+          return
+        }
+
+        setAdminDraft(config)
+        setRenderHistory(history)
+      } catch (error) {
+        if (!isCurrent) {
+          return
+        }
+
+        setAdminNotice(getErrorMessage(error))
+      } finally {
+        if (isCurrent) {
+          setIsLoadingAdminHistory(false)
+        }
+      }
+    }
+
+    loadAdminProjectData()
+
+    return () => {
+      isCurrent = false
+    }
+  }, [currentIsAdmin, dataApi, selectedAdminProjectId, userId])
+
+  const handlePasswordLogin = async ({ email, password }) => {
+    const normalizedEmail = email.trim()
+
+    if (!normalizedEmail) {
+      setAuthMessage('Email is required.')
       return
     }
 
-    resetUserWorkspace()
+    if (!password) {
+      setAuthMessage('Password is required for password login.')
+      return
+    }
+
+    setAuthAction('password')
+    setAuthMessage('')
+
+    try {
+      const { error } = await supabaseClient.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      })
+
+      if (error) {
+        setAuthMessage(error.message)
+      }
+    } finally {
+      setAuthAction('')
+    }
   }
 
-  const handleLogout = () => {
-    setSession(DEFAULT_SESSION)
-    clearSession(storage)
-    setAdminDraft(savedAdminConfig)
+  const handleMagicLinkLogin = async ({ email }) => {
+    const normalizedEmail = email.trim()
+
+    if (!normalizedEmail) {
+      setAuthMessage('Email is required.')
+      return
+    }
+
+    setAuthAction('magic')
+    setAuthMessage('')
+
+    try {
+      const { error } = await supabaseClient.auth.signInWithOtp({
+        email: normalizedEmail,
+        options: {
+          emailRedirectTo:
+            typeof window !== 'undefined' ? window.location.origin : undefined,
+        },
+      })
+
+      if (error) {
+        setAuthMessage(error.message)
+        return
+      }
+
+      setAuthMessage('Magic link sent. Check your inbox to finish signing in.')
+    } finally {
+      setAuthAction('')
+    }
+  }
+
+  const handleLogout = async () => {
+    const { error } = await supabaseClient.auth.signOut()
+
+    if (error) {
+      setAuthMessage(error.message)
+      return
+    }
+
+    setAuthSession(null)
+    setAuthMessage('')
+    setAuthAction('')
+    setAdminDraft(mergeAdminConfig(DEFAULT_ADMIN_CONFIG))
+    setAdminProjects([])
     setAdminNotice('')
+    setRenderHistory([])
+    setSelectedAdminProjectId('')
     setShowAdminPreview(false)
     resetUserWorkspace()
   }
@@ -233,22 +595,69 @@ function App({
       return
     }
 
+    if (!user) {
+      setGenerationError('You must be signed in before generating images.')
+      return
+    }
+
+    if (!authAccessToken) {
+      setGenerationError('The Supabase session is missing a valid access token.')
+      return
+    }
+
+    const projectName = fields.project_name.trim()
+    const company = projectCompany.trim()
+
+    if (!projectName || !company) {
+      setGenerationError('Project name and company are required before generating.')
+      return
+    }
+
     setGenerationError('')
     setIsGenerating(true)
 
     const nextAttemptCount = attemptCount + 1
     setAttemptCount(nextAttemptCount)
-    saveAttemptCount(storage, nextAttemptCount)
+    dataApi.saveAttemptCount?.(attemptStorage, nextAttemptCount)
+
+    let activeProjectId = userProjectId
+    let activeConfig = savedAdminConfig
+    let activePrompt = prompt
 
     try {
+      if (!activeProjectId || isUserProjectLoading) {
+        const ensuredProject = await dataApi.ensureProject({
+          name: projectName,
+          company,
+        })
+
+        activeProjectId = ensuredProject.id
+        setUserProjectId(ensuredProject.id)
+
+        activeConfig = await dataApi.getProjectConfig(ensuredProject.id)
+        activePrompt = buildPrompt(fields, activeConfig)
+        setSavedAdminConfig(activeConfig)
+      }
+
       const request = buildGenerationRequest({
-        prompt,
+        prompt: activePrompt,
         aspect: fields.aspect,
-        adminConfig: savedAdminConfig,
+        adminConfig: activeConfig,
         referenceImage,
+        projectId: activeProjectId,
+        systemType: fields.room_type,
       })
-      const result = await generateImage(request)
+      const result = await generateImage(request, authAccessToken)
       setImageResult(result)
+
+      try {
+        const renders = await dataApi.getRenders({
+          userId,
+        })
+        setRecentRenders(renders)
+      } catch (refreshError) {
+        setGenerationError(getErrorMessage(refreshError))
+      }
     } catch (error) {
       setGenerationError(getErrorMessage(error))
     } finally {
@@ -256,12 +665,29 @@ function App({
     }
   }
 
-  const handleSaveAdmin = () => {
-    const nextConfig = mergeAdminConfig(adminDraft)
-    setSavedAdminConfig(nextConfig)
-    setAdminDraft(nextConfig)
-    saveAdminConfig(storage, nextConfig)
-    setAdminNotice('Configuration saved locally for this browser.')
+  const handleSaveAdmin = async () => {
+    if (!selectedAdminProjectId) {
+      setAdminNotice('Select a project before saving configuration.')
+      return
+    }
+
+    setIsSavingAdmin(true)
+    setAdminNotice('')
+
+    try {
+      const nextConfig = mergeAdminConfig(adminDraft)
+      const savedConfig = await dataApi.saveProjectConfig({
+        projectId: selectedAdminProjectId,
+        config: nextConfig,
+      })
+
+      setAdminDraft(savedConfig)
+      setAdminNotice('Configuration saved to Supabase.')
+    } catch (error) {
+      setAdminNotice(getErrorMessage(error))
+    } finally {
+      setIsSavingAdmin(false)
+    }
   }
 
   const handleResetAdmin = () => {
@@ -269,11 +695,16 @@ function App({
     setAdminNotice('Defaults restored in the editor. Save to apply them.')
   }
 
+  const handleAdminProjectChange = (projectId) => {
+    setSelectedAdminProjectId(projectId)
+    setAdminNotice('')
+  }
+
   const userHeaderActions = (
     <>
       <div className="session-meta">
         <span className="badge badge--accent">User</span>
-        <p className="t-small">{session.displayName || 'Valtria user'}</p>
+        <p className="t-small">{sessionView.displayName || 'Valtria user'}</p>
       </div>
       <button type="button" className="btn btn-ghost" onClick={handleLogout}>
         Sign out
@@ -281,19 +712,48 @@ function App({
     </>
   )
 
-  if (!session.isAuthenticated) {
-    return <AuthScreen onLogin={handleLogin} />
+  if (!isAuthReady) {
+    return (
+      <AuthScreen
+        onPasswordLogin={handlePasswordLogin}
+        onMagicLinkLogin={handleMagicLinkLogin}
+        isSubmitting={Boolean(authAction)}
+        activeAction={authAction}
+        errorMessage={authMessage}
+        isInitializing
+      />
+    )
   }
 
-  if (session.role === 'admin') {
+  if (!sessionView.isAuthenticated) {
+    return (
+      <AuthScreen
+        onPasswordLogin={handlePasswordLogin}
+        onMagicLinkLogin={handleMagicLinkLogin}
+        isSubmitting={Boolean(authAction)}
+        activeAction={authAction}
+        errorMessage={authMessage}
+      />
+    )
+  }
+
+  if (sessionView.role === 'admin') {
     return (
       <AdminConsole
-        session={session}
+        user={user}
         config={adminDraft}
         options={OPTIONS}
         previewPrompt={adminPreviewPrompt}
         showPreview={showAdminPreview}
         notice={adminNotice}
+        projects={adminProjects}
+        selectedProjectId={selectedAdminProjectId}
+        renderHistory={renderHistory}
+        projectCostTotal={projectCostTotal}
+        isLoadingProjects={isLoadingAdminProjects}
+        isLoadingHistory={isLoadingAdminHistory}
+        isSaving={isSavingAdmin}
+        onProjectChange={handleAdminProjectChange}
         onGenerationChange={(key, value) => {
           setAdminDraft((previous) => ({
             ...previous,
@@ -305,7 +765,11 @@ function App({
           setAdminNotice('')
         }}
         onLimitChange={(key, value) => {
-          const parsed = Number.parseInt(value, 10)
+          const parsed =
+            key === 'budgetLimitUsd'
+              ? Number.parseFloat(value)
+              : Number.parseInt(value, 10)
+
           if (!Number.isFinite(parsed)) {
             return
           }
@@ -390,6 +854,15 @@ function App({
             setFields((previous) => ({ ...previous, project_name: value }))
           }
           placeholder="Example: Edwards Lifescience 305"
+        />
+        <FieldControl
+          id="project_company"
+          label="Company"
+          type="text"
+          value={projectCompany}
+          onChange={setProjectCompany}
+          placeholder="Example: Valtria"
+          hint={projectCompanyHint}
         />
         <FieldControl
           id="room_type"
@@ -557,6 +1030,7 @@ function App({
           attemptCount={attemptCount}
           maxAttempts={maxAttempts}
           blockReason={generationBlockReason}
+          recentRenders={recentRenders}
         />
       </StepCard>
     </WizardLayout>

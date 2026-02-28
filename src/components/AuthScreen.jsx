@@ -7,23 +7,31 @@ const COPY = {
     title: 'Generate a render',
     description:
       'Complete the short brief, paste the Dalux BIM image, and download the final render.',
-    submitLabel: 'Enter workspace',
-    fallbackName: 'Valtria user',
+    submitLabel: 'Sign in with password',
+    magicLabel: 'Send magic link',
   },
   admin: {
     badge: 'Admin access',
     title: 'Configure the technical engine',
     description:
       'Manage OpenAI defaults, prompt guardrails, and the approved HEX palette.',
-    submitLabel: 'Enter as admin',
-    fallbackName: 'Valtria admin',
+    submitLabel: 'Admin sign in',
+    magicLabel: 'Admin magic link',
   },
 }
 
-export function AuthScreen({ onLogin, preferredRole = 'user' }) {
+export function AuthScreen({
+  onPasswordLogin,
+  onMagicLinkLogin,
+  preferredRole = 'user',
+  isSubmitting = false,
+  activeAction = '',
+  errorMessage = '',
+  isInitializing = false,
+}) {
   const [selectedRole, setSelectedRole] = useState(preferredRole)
-  const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
 
   useEffect(() => {
     setSelectedRole(preferredRole)
@@ -31,13 +39,31 @@ export function AuthScreen({ onLogin, preferredRole = 'user' }) {
 
   const handleSubmit = (event) => {
     event.preventDefault()
-    const profile = COPY[selectedRole]
-
-    onLogin(selectedRole, {
-      displayName: displayName.trim() || profile.fallbackName,
+    onPasswordLogin?.({
       email: email.trim(),
+      password,
+      role: selectedRole,
     })
   }
+
+  const handleMagicLink = () => {
+    onMagicLinkLogin?.({
+      email: email.trim(),
+      role: selectedRole,
+    })
+  }
+
+  const canSubmitPassword =
+    !isInitializing && !isSubmitting && Boolean(email.trim()) && Boolean(password)
+  const canSubmitMagic =
+    !isInitializing && !isSubmitting && Boolean(email.trim())
+  const statusMessage = isInitializing
+    ? 'Checking the active Supabase session.'
+    : activeAction === 'password'
+      ? 'Signing in with your password.'
+      : activeAction === 'magic'
+        ? 'Sending the magic link email.'
+        : ''
 
   return (
     <div className="app-shell">
@@ -50,8 +76,8 @@ export function AuthScreen({ onLogin, preferredRole = 'user' }) {
             <p className="t-label">HVAC Render Builder</p>
             <h1 className="t-hero">Valtria Render Studio</h1>
             <p className="t-body app-header__subtitle">
-              Mock access flow for the proof of concept. User and admin roles are
-              visually separated, while the OpenAI key stays server-side.
+              Sign in with Supabase to access the user or admin workspace while
+              keeping the OpenAI key server-side.
             </p>
           </div>
         </div>
@@ -70,35 +96,56 @@ export function AuthScreen({ onLogin, preferredRole = 'user' }) {
 
             <form className="auth-form" onSubmit={handleSubmit}>
               <div className="field-control">
-                <label className="label" htmlFor="auth-display-name">
-                  Display name
-                </label>
-                <input
-                  id="auth-display-name"
-                  className="input"
-                  value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                  placeholder="Example: David"
-                />
-              </div>
-
-              <div className="field-control">
                 <label className="label" htmlFor="auth-email">
-                  Email (optional)
+                  Email
                 </label>
                 <input
                   id="auth-email"
+                  type="email"
                   className="input"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="name@company.com"
+                  autoComplete="email"
                 />
               </div>
 
-              <button type="submit" className="btn btn-primary">
+              <div className="field-control">
+                <label className="label" htmlFor="auth-password">
+                  Password (optional for magic link)
+                </label>
+                <input
+                  id="auth-password"
+                  type="password"
+                  className="input"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Use your Supabase password"
+                  autoComplete="current-password"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={!canSubmitPassword}
+              >
                 {COPY[selectedRole].submitLabel}
               </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={handleMagicLink}
+                disabled={!canSubmitMagic}
+              >
+                {COPY[selectedRole].magicLabel}
+              </button>
             </form>
+
+            {statusMessage ? (
+              <p className="t-small auth-panel__copy">{statusMessage}</p>
+            ) : null}
+            {errorMessage ? <p className="image-panel__error">{errorMessage}</p> : null}
 
             <div className="auth-switch">
               {selectedRole === 'admin' ? (

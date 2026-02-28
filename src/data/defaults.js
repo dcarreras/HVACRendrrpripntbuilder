@@ -46,6 +46,7 @@ export const DEFAULT_ADMIN_CONFIG = {
   limits: {
     maxPromptTokens: 700,
     maxAttemptsPerSession: 3,
+    budgetLimitUsd: 10,
   },
   promptDefaults: {
     referenceFidelity:

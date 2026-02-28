@@ -2,94 +2,289 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { DEFAULT_ADMIN_CONFIG, DEFAULT_FIELDS } from './data/defaults'
+import { mergeAdminConfig } from './lib/storage'
 
-function createStorage() {
-  const data = new Map()
+function createDeferred() {
+  let resolve
 
   return {
-    getItem(key) {
-      return data.has(key) ? data.get(key) : null
-    },
-    setItem(key, value) {
-      data.set(key, String(value))
-    },
-    removeItem(key) {
-      data.delete(key)
-    },
-    clear() {
-      data.clear()
+    promise: new Promise((nextResolve) => {
+      resolve = nextResolve
+    }),
+    resolve,
+  }
+}
+
+function createSession(overrides = {}) {
+  const userOverrides = overrides.user || {}
+
+  return {
+    access_token: overrides.access_token || 'token-123',
+    user: {
+      id: 'user-1',
+      email: 'user@example.com',
+      user_metadata: {},
+      ...userOverrides,
     },
   }
 }
 
+function createSupabaseClient({
+  initialSession = null,
+  getSessionPromise = null,
+  passwordSession = createSession(),
+  magicLinkError = null,
+} = {}) {
+  let listener = () => {}
+
+  const client = {
+    auth: {
+      getSession: vi.fn().mockImplementation(async () => {
+        if (getSessionPromise) {
+          return getSessionPromise
+        }
+
+        return {
+          data: { session: initialSession },
+          error: null,
+        }
+      }),
+      onAuthStateChange: vi.fn((callback) => {
+        listener = callback
+
+        return {
+          data: {
+            subscription: {
+              unsubscribe: vi.fn(),
+            },
+          },
+        }
+      }),
+      signInWithPassword: vi.fn(async () => {
+        listener('SIGNED_IN', passwordSession)
+        return {
+          data: {
+            session: passwordSession,
+            user: passwordSession.user,
+          },
+          error: null,
+        }
+      }),
+      signInWithOtp: vi.fn(async () => ({
+        data: {},
+        error: magicLinkError,
+      })),
+      signOut: vi.fn(async () => {
+        listener('SIGNED_OUT', null)
+        return {
+          error: null,
+        }
+      }),
+    },
+  }
+
+  return client
+}
+
+function createDataApi(overrides = {}) {
+  return {
+    ensureProject: vi.fn().mockResolvedValue({
+      id: 'project-1',
+      name: DEFAULT_FIELDS.project_name,
+      company: 'Valtria',
+    }),
+    getProjectConfig: vi.fn().mockResolvedValue(
+      mergeAdminConfig(DEFAULT_ADMIN_CONFIG),
+    ),
+    saveProjectConfig: vi.fn().mockResolvedValue(
+      mergeAdminConfig(DEFAULT_ADMIN_CONFIG),
+    ),
+    getRenders: vi.fn().mockResolvedValue([]),
+    listProjects: vi.fn().mockResolvedValue([]),
+    getProjectRenderHistory: vi.fn().mockResolvedValue([]),
+    loadAttemptCount: vi.fn().mockReturnValue(0),
+    saveAttemptCount: vi.fn(),
+    ...overrides,
+  }
+}
+
 describe('App', () => {
-  it('shows the auth gate first and opens the user workspace without admin controls', async () => {
-    const user = userEvent.setup()
-    const generateImage = vi.fn().mockResolvedValue({
-      imageDataUrl: 'data:image/png;base64,AAA',
+  it('shows the auth gate in loading mode until Supabase hydration resolves', async () => {
+    const deferred = createDeferred()
+    const supabaseClient = createSupabaseClient({
+      getSessionPromise: deferred.promise,
     })
 
-    render(<App storage={createStorage()} generateImage={generateImage} />)
+    render(
+      <App
+        supabaseClient={supabaseClient}
+        dataApi={createDataApi()}
+        generateImage={vi.fn()}
+      />,
+    )
 
-    expect(screen.getByRole('heading', { name: 'Valtria Render Studio' })).toBeVisible()
+    expect(screen.getByText('Checking the active Supabase session.')).toBeVisible()
 
-    await user.click(screen.getByRole('button', { name: 'Enter workspace' }))
+    deferred.resolve({
+      data: { session: null },
+      error: null,
+    })
 
-    expect(screen.getByRole('heading', { name: 'Project basics' })).toBeVisible()
-    expect(screen.queryByText('OpenAI generation settings')).not.toBeInTheDocument()
-    expect(screen.queryByText('Palette manager')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(
+        screen.queryByText('Checking the active Supabase session.'),
+      ).not.toBeInTheDocument()
+    })
   })
 
-  it('shows the admin console and supports sign out back to the auth gate', async () => {
+  it('signs in with password and opens the user workspace', async () => {
     const user = userEvent.setup()
-    render(<App storage={createStorage()} generateImage={vi.fn()} />)
+    const supabaseClient = createSupabaseClient()
 
-    await user.click(screen.getByRole('button', { name: 'Admin access' }))
-    await user.click(screen.getByRole('button', { name: 'Enter as admin' }))
+    render(
+      <App
+        supabaseClient={supabaseClient}
+        dataApi={createDataApi()}
+        generateImage={vi.fn()}
+      />,
+    )
+
+    await user.type(screen.getByLabelText('Email'), 'user@example.com')
+    await user.type(screen.getByLabelText('Password (optional for magic link)'), 'secret')
+    await user.click(screen.getByRole('button', { name: 'Sign in with password' }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: 'Project basics' }),
+      ).toBeVisible()
+    })
+
+    expect(supabaseClient.auth.signInWithPassword).toHaveBeenCalledWith({
+      email: 'user@example.com',
+      password: 'secret',
+    })
+  })
+
+  it('shows the admin console when the session user metadata marks the user as admin', async () => {
+    const supabaseClient = createSupabaseClient({
+      initialSession: createSession({
+        user: {
+          user_metadata: {
+            role: 'admin',
+          },
+        },
+      }),
+    })
+    const dataApi = createDataApi({
+      listProjects: vi.fn().mockResolvedValue([
+        {
+          id: 'project-1',
+          name: 'Edwards Lifescience 305',
+          company: 'Valtria',
+        },
+      ]),
+    })
+
+    render(
+      <App
+        supabaseClient={supabaseClient}
+        dataApi={dataApi}
+        generateImage={vi.fn()}
+      />,
+    )
 
     expect(
-      screen.getByRole('heading', { name: 'Technical generation settings' }),
+      await screen.findByRole('heading', { name: 'Technical generation settings' }),
+    ).toBeVisible()
+    expect(dataApi.listProjects).toHaveBeenCalledTimes(1)
+  })
+
+  it('signs out and returns to the auth screen', async () => {
+    const user = userEvent.setup()
+    const supabaseClient = createSupabaseClient({
+      initialSession: createSession(),
+    })
+
+    render(
+      <App
+        supabaseClient={supabaseClient}
+        dataApi={createDataApi()}
+        generateImage={vi.fn()}
+      />,
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: 'Project basics' }),
     ).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: 'Sign out' }))
 
-    expect(screen.getByRole('button', { name: 'Admin access' })).toBeVisible()
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Sign in with password' })).toBeVisible()
+    })
   })
 
-  it('persists admin settings locally and uses them in the user generation request', async () => {
+  it('creates the project and hydrates the project config after the user provides the company', async () => {
     const user = userEvent.setup()
-    const storage = createStorage()
-
-    const initialRender = render(<App storage={storage} generateImage={vi.fn()} />)
-
-    await user.click(screen.getByRole('button', { name: 'Admin access' }))
-    await user.click(screen.getByRole('button', { name: 'Enter as admin' }))
-    await user.selectOptions(screen.getByLabelText('Image model'), ['gpt-image-1'])
-    await user.click(screen.getByRole('button', { name: 'Save configuration' }))
-    await user.click(screen.getByRole('button', { name: 'Sign out' }))
-
-    initialRender.unmount()
-
-    const generateImage = vi.fn().mockResolvedValue({
-      imageDataUrl: 'data:image/png;base64,BBB',
+    const supabaseClient = createSupabaseClient({
+      initialSession: createSession(),
+    })
+    const dataApi = createDataApi({
+      getProjectConfig: vi.fn().mockResolvedValue(
+        mergeAdminConfig({
+          ...DEFAULT_ADMIN_CONFIG,
+          generation: {
+            ...DEFAULT_ADMIN_CONFIG.generation,
+            model: 'gpt-image-1',
+          },
+        }),
+      ),
     })
 
-    render(<App storage={storage} generateImage={generateImage} />)
+    render(
+      <App
+        supabaseClient={supabaseClient}
+        dataApi={dataApi}
+        generateImage={vi.fn()}
+      />,
+    )
 
-    await user.click(screen.getByRole('button', { name: 'Enter workspace' }))
-    await user.click(screen.getByRole('button', { name: 'Generate image' }))
+    await screen.findByRole('heading', { name: 'Project basics' })
+    await user.type(screen.getByLabelText('Company'), 'Valtria')
 
     await waitFor(() => {
-      expect(generateImage).toHaveBeenCalledTimes(1)
+      expect(dataApi.ensureProject).toHaveBeenLastCalledWith({
+        name: DEFAULT_FIELDS.project_name,
+        company: 'Valtria',
+      })
     })
 
-    expect(generateImage.mock.calls[0][0].generation.model).toBe('gpt-image-1')
+    await waitFor(() => {
+      expect(dataApi.getProjectConfig).toHaveBeenCalledWith('project-1')
+    })
   })
 
-  it('uploads a reference image, carries the extra detail into the prompt, and renders the output image', async () => {
+  it('refreshes the saved gallery after a successful render', async () => {
     const user = userEvent.setup()
+    const supabaseClient = createSupabaseClient({
+      initialSession: createSession(),
+    })
+    const dataApi = createDataApi({
+      getRenders: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            id: 'render-1',
+            created_at: '2026-02-28T08:00:00.000Z',
+            system_type: 'Clean Room',
+            imageUrl: 'https://example.com/render.png',
+          },
+        ]),
+    })
     const generateImage = vi.fn().mockResolvedValue({
-      imageDataUrl: 'data:image/png;base64,CCC',
+      imageDataUrl: 'data:image/png;base64,AAA',
     })
     const readReferenceFile = vi.fn().mockResolvedValue({
       dataUrl: 'data:image/png;base64,AAA',
@@ -99,18 +294,19 @@ describe('App', () => {
 
     render(
       <App
-        storage={createStorage()}
+        supabaseClient={supabaseClient}
+        dataApi={dataApi}
         generateImage={generateImage}
         readReferenceFile={readReferenceFile}
       />,
     )
 
-    await user.click(screen.getByRole('button', { name: 'Enter workspace' }))
-    await user.selectOptions(screen.getByLabelText('Aspect ratio'), ['1:1'])
-    await user.type(
-      screen.getByLabelText('Do you want to add any extra detail?'),
-      'Keep the coves continuous.',
-    )
+    await screen.findByRole('heading', { name: 'Project basics' })
+    await user.type(screen.getByLabelText('Company'), 'Valtria')
+
+    await waitFor(() => {
+      expect(dataApi.ensureProject).toHaveBeenCalled()
+    })
 
     const fileInput = screen.getByLabelText('Reference image file input')
     const file = new File(['reference'], 'dalux.png', { type: 'image/png' })
@@ -131,68 +327,14 @@ describe('App', () => {
       expect(generateImage).toHaveBeenCalledTimes(1)
     })
 
-    expect(generateImage.mock.calls[0][0].generation.size).toBe('1024x1024')
-    expect(generateImage.mock.calls[0][0].referenceImage).toEqual({
-      dataUrl: 'data:image/png;base64,AAA',
-      mimeType: 'image/png',
-    })
-    expect(generateImage.mock.calls[0][0].prompt).toContain(
-      'Keep the coves continuous.',
-    )
-    expect(screen.getByAltText('Generated HVAC render')).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Download image' })).toHaveAttribute(
-      'href',
-      'data:image/png;base64,CCC',
-    )
-  })
-
-  it('accepts pasted images and allows removing the current reference', async () => {
-    const user = userEvent.setup()
-    const readReferenceFile = vi.fn().mockResolvedValue({
-      dataUrl: 'data:image/png;base64,DDD',
-      mimeType: 'image/png',
-      name: 'clipboard.png',
-    })
-    const generateImage = vi.fn().mockResolvedValue({
-      imageDataUrl: 'data:image/png;base64,EEE',
-    })
-    const file = new File(['clipboard'], 'clipboard.png', { type: 'image/png' })
-
-    render(
-      <App
-        storage={createStorage()}
-        generateImage={generateImage}
-        readReferenceFile={readReferenceFile}
-      />,
-    )
-
-    await user.click(screen.getByRole('button', { name: 'Enter workspace' }))
-
-    fireEvent.paste(screen.getByLabelText('Reference image paste zone'), {
-      clipboardData: {
-        items: [
-          {
-            type: 'image/png',
-            getAsFile: () => file,
-          },
-        ],
-      },
-    })
-
     await waitFor(() => {
-      expect(screen.getByAltText('Reference preview')).toBeVisible()
+      expect(
+        screen.getByRole('link', { name: 'Download' }),
+      ).toHaveAttribute('href', 'https://example.com/render.png')
     })
 
-    await user.click(screen.getByRole('button', { name: 'Generate image' }))
-
-    await waitFor(() => {
-      expect(generateImage).toHaveBeenCalledTimes(1)
-    })
-
-    expect(generateImage.mock.calls[0][0].referenceImage.mimeType).toBe('image/png')
-
-    await user.click(screen.getByRole('button', { name: 'Remove' }))
-
-    expect(screen.queryByAltText('Reference preview')).not.toBeInTheDocument()
+    expect(generateImage.mock.calls[0][0].projectId).toBe('project-1')
+    expect(generateImage.mock.calls[0][0].systemType).toBe('Clean Room')
+    expect(generateImage.mock.calls[0][1]).toBe('token-123')
   })
 })

@@ -43,6 +43,7 @@
  * @property {Object} limits
  * @property {number} limits.maxPromptTokens
  * @property {number} limits.maxAttemptsPerSession
+ * @property {number} limits.budgetLimitUsd
  * @property {Object} promptDefaults
  * @property {string} promptDefaults.referenceFidelity
  * @property {string} promptDefaults.negative

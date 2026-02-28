@@ -1,3 +1,4 @@
+import { createClient } from '@supabase/supabase-js'
 import OpenAI, { toFile } from 'openai'
 
 const JSON_HEADERS = {
@@ -14,12 +15,19 @@ const ALLOWED_REFERENCE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
 export const DEFAULT_IMAGE_MODEL = 'gpt-image-1.5'
 export const DEFAULT_MAX_PROMPT_TOKENS = 700
+export const DEFAULT_RENDER_COST_USD = 0.04
 
 function createResponse(statusCode, payload) {
   return new Response(JSON.stringify(payload), {
     status: statusCode,
     headers: JSON_HEADERS,
   })
+}
+
+function createHttpError(status, message) {
+  const error = new Error(message)
+  error.status = status
+  return error
 }
 
 function readAllowedValue(value, allowedValues, fallback) {
@@ -42,6 +50,31 @@ function estimatePromptTokens(value) {
   }
 
   return Math.max(1, Math.ceil(value.trim().length / 4))
+}
+
+function getImageBase64(result) {
+  const base64 = result?.data?.[0]?.b64_json
+  if (!base64) {
+    throw new Error('OpenAI did not return image data.')
+  }
+
+  return base64
+}
+
+function toImageDataUrl(base64) {
+  return `data:image/png;base64,${base64}`
+}
+
+function getFileName(mimeType) {
+  if (mimeType === 'image/jpeg') {
+    return 'reference.jpg'
+  }
+
+  if (mimeType === 'image/webp') {
+    return 'reference.webp'
+  }
+
+  return 'reference.png'
 }
 
 export function normalizeGenerationRequest(
@@ -98,25 +131,53 @@ export function parseReferenceImage(referenceImage) {
   }
 }
 
-function getFileName(mimeType) {
-  if (mimeType === 'image/jpeg') {
-    return 'reference.jpg'
+export function readBearerToken(headers) {
+  const headerValue =
+    headers.get('authorization') || headers.get('Authorization') || ''
+  const match = headerValue.match(/^Bearer\s+(.+)$/i)
+
+  if (!match) {
+    throw createHttpError(401, 'Authorization header must use a Bearer token.')
   }
 
-  if (mimeType === 'image/webp') {
-    return 'reference.webp'
-  }
-
-  return 'reference.png'
+  return match[1]
 }
 
-function toImageDataUrl(result) {
-  const base64 = result?.data?.[0]?.b64_json
-  if (!base64) {
-    throw new Error('OpenAI did not return image data.')
+export function createSupabaseAdminClient(
+  supabaseUrl = process.env.VITE_SUPABASE_URL,
+  serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY,
+) {
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw createHttpError(500, 'Supabase server credentials are not configured.')
   }
 
-  return `data:image/png;base64,${base64}`
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
+}
+
+export async function authenticateRequest(request, adminClient) {
+  const token = readBearerToken(request.headers)
+  const { data, error } = await adminClient.auth.getUser(token)
+
+  if (error || !data?.user) {
+    throw createHttpError(401, 'Invalid or expired Supabase token.')
+  }
+
+  return data.user
+}
+
+export function extractPngBase64(dataUrl) {
+  const match = String(dataUrl || '').match(/^data:image\/png;base64,(.+)$/i)
+
+  if (!match) {
+    throw new Error('Generated image data is invalid.')
+  }
+
+  return match[1]
 }
 
 export async function createImageResult(
@@ -163,9 +224,10 @@ export async function createImageResult(
       n: 1,
       output_format: 'png',
     })
+    const imageBase64 = getImageBase64(result)
 
     return {
-      imageDataUrl: toImageDataUrl(result),
+      imageDataUrl: toImageDataUrl(imageBase64),
       revisedPrompt: result?.data?.[0]?.revised_prompt || '',
     }
   }
@@ -180,19 +242,83 @@ export async function createImageResult(
     n: 1,
     output_format: 'png',
   })
+  const imageBase64 = getImageBase64(result)
 
   return {
-    imageDataUrl: toImageDataUrl(result),
+    imageDataUrl: toImageDataUrl(imageBase64),
     revisedPrompt: result?.data?.[0]?.revised_prompt || '',
   }
 }
 
-export async function handler(request) {
+export async function uploadGeneratedImage(
+  adminClient,
+  { userId, imageDataUrl, timestamp = Date.now() },
+) {
+  if (!userId) {
+    throw new Error('A user is required to save the generated render.')
+  }
+
+  const imageBase64 = extractPngBase64(imageDataUrl)
+  const storagePath = `${userId}/${timestamp}.png`
+  const buffer = Buffer.from(imageBase64, 'base64')
+
+  const { error } = await adminClient
+    .storage
+    .from('renders')
+    .upload(storagePath, buffer, {
+      contentType: 'image/png',
+      upsert: false,
+    })
+
+  if (error) {
+    throw new Error(error.message || 'Unable to upload the render image.')
+  }
+
+  return storagePath
+}
+
+export async function persistRenderRecord(adminClient, record) {
+  const { data, error } = await adminClient
+    .from('renders')
+    .insert(record)
+    .select('id, image_url')
+    .single()
+
+  if (error) {
+    throw new Error(error.message || 'Unable to save the render record.')
+  }
+
+  return data
+}
+
+export async function handler(request, dependencies = {}) {
   if (request.method !== 'POST') {
     return createResponse(405, { error: 'Method not allowed.' })
   }
 
-  if (!process.env.OPENAI_API_KEY) {
+  const {
+    openAiApiKey = process.env.OPENAI_API_KEY,
+    defaultModel = process.env.OPENAI_IMAGE_MODEL || DEFAULT_IMAGE_MODEL,
+    supabaseClient = null,
+    createOpenAiClient = (apiKey) =>
+      new OpenAI({
+        apiKey,
+      }),
+    now = () => Date.now(),
+  } = dependencies
+
+  let adminClient
+  let user
+  try {
+    adminClient = supabaseClient || createSupabaseAdminClient()
+    user = await authenticateRequest(request, adminClient)
+  } catch (error) {
+    return createResponse(error.status || 401, {
+      error: error.message || 'Invalid or expired Supabase token.',
+    })
+  }
+
+  if (!openAiApiKey) {
     return createResponse(500, { error: 'OPENAI_API_KEY is not configured.' })
   }
 
@@ -203,18 +329,33 @@ export async function handler(request) {
     return createResponse(400, { error: 'Request body must be valid JSON.' })
   }
 
+  const projectId = String(payload?.projectId || '').trim()
+  if (!projectId) {
+    return createResponse(400, { error: 'projectId is required.' })
+  }
+
   try {
-    const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+    const openAiClient = createOpenAiClient(openAiApiKey)
+    const result = await createImageResult(openAiClient, payload, defaultModel)
+    const storagePath = await uploadGeneratedImage(adminClient, {
+      userId: user.id,
+      imageDataUrl: result.imageDataUrl,
+      timestamp: now(),
+    })
+    const renderRecord = await persistRenderRecord(adminClient, {
+      user_id: user.id,
+      project_id: projectId,
+      system_type: String(payload?.systemType || '').trim() || 'Unknown system',
+      prompt_used: String(payload?.prompt || '').trim(),
+      image_url: storagePath,
+      cost_usd: DEFAULT_RENDER_COST_USD,
     })
 
-    const result = await createImageResult(
-      client,
-      payload,
-      process.env.OPENAI_IMAGE_MODEL || DEFAULT_IMAGE_MODEL,
-    )
-
-    return createResponse(200, result)
+    return createResponse(200, {
+      ...result,
+      renderId: renderRecord?.id || null,
+      storagePath,
+    })
   } catch (error) {
     const statusCode =
       typeof error?.status === 'number' && error.status >= 400

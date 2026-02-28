@@ -24,9 +24,13 @@ export function getImageSize(aspect) {
  *   aspect: string
  *   adminConfig: AdminConfig
  *   referenceImage?: ReferenceImage | null
+ *   projectId?: string
+ *   systemType?: string
  * }} options
  * @returns {{
  *   prompt: string
+ *   projectId: string
+ *   systemType: string
  *   referenceImage: { dataUrl: string, mimeType: string } | null
  *   generation: {
  *     model: string
@@ -46,9 +50,13 @@ export function buildGenerationRequest({
   aspect,
   adminConfig,
   referenceImage = null,
+  projectId = '',
+  systemType = '',
 }) {
   return {
     prompt,
+    projectId,
+    systemType,
     referenceImage: referenceImage
       ? {
           dataUrl: referenceImage.dataUrl,
@@ -71,15 +79,30 @@ export function buildGenerationRequest({
 
 /**
  * @param {ReturnType<typeof buildGenerationRequest>} payload
+ * @param {string | typeof fetch} accessTokenOrFetch
  * @param {typeof fetch} fetchImpl
  * @returns {Promise<{ imageDataUrl: string, revisedPrompt?: string }>}
  */
-export async function generateImageRequest(payload, fetchImpl = fetch) {
-  const response = await fetchImpl('/.netlify/functions/generate-image', {
+export async function generateImageRequest(
+  payload,
+  accessTokenOrFetch = '',
+  fetchImpl = fetch,
+) {
+  const accessToken =
+    typeof accessTokenOrFetch === 'string' ? accessTokenOrFetch : ''
+  const requestFetch =
+    typeof accessTokenOrFetch === 'function' ? accessTokenOrFetch : fetchImpl
+  const headers = {
+    'Content-Type': 'application/json',
+  }
+
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`
+  }
+
+  const response = await requestFetch('/.netlify/functions/generate-image', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify(payload),
   })
 
