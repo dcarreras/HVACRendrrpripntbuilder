@@ -291,11 +291,52 @@ export async function persistRenderRecord(adminClient, record) {
   return data
 }
 
-export async function handler(request, dependencies = {}) {
+function isNetlifyContext(candidate) {
+  return Boolean(candidate && typeof candidate.waitUntil === 'function')
+}
+
+function resolveHandlerInputs(contextOrDependencies, maybeDependencies) {
+  if (isNetlifyContext(contextOrDependencies)) {
+    return {
+      context: contextOrDependencies,
+      dependencies: maybeDependencies || {},
+    }
+  }
+
+  return {
+    context: null,
+    dependencies: contextOrDependencies || {},
+  }
+}
+
+function schedulePersistence(context, task) {
+  const wrappedTask = Promise.resolve()
+    .then(task)
+    .catch((error) => {
+      console.error('Render persistence failed.', error)
+    })
+
+  if (context?.waitUntil) {
+    context.waitUntil(wrappedTask)
+    return null
+  }
+
+  return wrappedTask
+}
+
+export async function handler(
+  request,
+  contextOrDependencies = {},
+  maybeDependencies = {},
+) {
   if (request.method !== 'POST') {
     return createResponse(405, { error: 'Method not allowed.' })
   }
 
+  const {
+    context,
+    dependencies,
+  } = resolveHandlerInputs(contextOrDependencies, maybeDependencies)
   const {
     openAiApiKey = process.env.OPENAI_API_KEY,
     defaultModel = process.env.OPENAI_IMAGE_MODEL || DEFAULT_IMAGE_MODEL,
@@ -337,24 +378,34 @@ export async function handler(request, dependencies = {}) {
   try {
     const openAiClient = createOpenAiClient(openAiApiKey)
     const result = await createImageResult(openAiClient, payload, defaultModel)
-    const storagePath = await uploadGeneratedImage(adminClient, {
-      userId: user.id,
-      imageDataUrl: result.imageDataUrl,
-      timestamp: now(),
-    })
-    const renderRecord = await persistRenderRecord(adminClient, {
-      user_id: user.id,
-      project_id: projectId,
-      system_type: String(payload?.systemType || '').trim() || 'Unknown system',
-      prompt_used: String(payload?.prompt || '').trim(),
-      image_url: storagePath,
-      cost_usd: DEFAULT_RENDER_COST_USD,
-    })
+    const persistRender = async () => {
+      const storagePath = await uploadGeneratedImage(adminClient, {
+        userId: user.id,
+        imageDataUrl: result.imageDataUrl,
+        timestamp: now(),
+      })
+      const renderRecord = await persistRenderRecord(adminClient, {
+        user_id: user.id,
+        project_id: projectId,
+        system_type: String(payload?.systemType || '').trim() || 'Unknown system',
+        prompt_used: String(payload?.prompt || '').trim(),
+        image_url: storagePath,
+        cost_usd: DEFAULT_RENDER_COST_USD,
+      })
+
+      return {
+        renderId: renderRecord?.id || null,
+        storagePath,
+      }
+    }
+
+    const persistedResult = context?.waitUntil
+      ? (schedulePersistence(context, persistRender), null)
+      : await schedulePersistence(context, persistRender)
 
     return createResponse(200, {
       ...result,
-      renderId: renderRecord?.id || null,
-      storagePath,
+      ...(persistedResult || {}),
     })
   } catch (error) {
     const statusCode =

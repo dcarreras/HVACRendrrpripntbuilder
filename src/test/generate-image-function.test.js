@@ -293,4 +293,53 @@ describe('handler', () => {
       cost_usd: 0.04,
     })
   })
+
+  it('returns immediately and uses waitUntil when a Netlify context is available', async () => {
+    const { client, spies } = createSupabaseAdminClient()
+    const waitUntil = vi.fn()
+    const createOpenAiClient = vi.fn(() => ({
+      images: {
+        generate: vi.fn().mockResolvedValue({
+          data: [
+            {
+              b64_json: 'QUJD',
+            },
+          ],
+        }),
+        edit: vi.fn(),
+      },
+    }))
+
+    const response = await handler(
+      createRequest(
+        JSON.stringify({
+          prompt: 'test prompt',
+          projectId: 'project-1',
+          systemType: 'Clean Room',
+          generation: {
+            model: 'gpt-image-1.5',
+            size: '1024x1024',
+          },
+        }),
+      ),
+      {
+        waitUntil,
+      },
+      {
+        supabaseClient: client,
+        openAiApiKey: 'test-key',
+        createOpenAiClient,
+        now: () => 123456,
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(waitUntil).toHaveBeenCalledTimes(1)
+    expect((await response.json()).storagePath).toBeUndefined()
+
+    await waitUntil.mock.calls[0][0]
+
+    expect(spies.upload).toHaveBeenCalledTimes(1)
+    expect(spies.insert).toHaveBeenCalledTimes(1)
+  })
 })

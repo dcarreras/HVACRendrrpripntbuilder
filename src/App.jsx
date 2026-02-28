@@ -115,6 +115,12 @@ function cloneDefaults() {
   }
 }
 
+function wait(delayMs) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, delayMs)
+  })
+}
+
 function isAdminUser(user) {
   return user?.user_metadata?.role === 'admin'
 }
@@ -623,6 +629,7 @@ function App({
     let activeProjectId = userProjectId
     let activeConfig = savedAdminConfig
     let activePrompt = prompt
+    const previousLatestRenderId = recentRenders[0]?.id || ''
 
     try {
       if (!activeProjectId || isUserProjectLoading) {
@@ -651,10 +658,27 @@ function App({
       setImageResult(result)
 
       try {
-        const renders = await dataApi.getRenders({
-          userId,
-        })
-        setRecentRenders(renders)
+        let latestRenders = []
+
+        for (let attempt = 0; attempt < 6; attempt += 1) {
+          latestRenders = await dataApi.getRenders({
+            userId,
+          })
+          setRecentRenders(latestRenders)
+
+          const latestRenderId = latestRenders[0]?.id || ''
+          const hasNewRender =
+            latestRenderId &&
+            (!previousLatestRenderId || latestRenderId !== previousLatestRenderId)
+
+          if (hasNewRender || !result?.imageDataUrl) {
+            break
+          }
+
+          if (attempt < 5) {
+            await wait(1500)
+          }
+        }
       } catch (refreshError) {
         setGenerationError(getErrorMessage(refreshError))
       }
