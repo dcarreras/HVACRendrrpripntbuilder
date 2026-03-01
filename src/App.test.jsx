@@ -292,6 +292,54 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Admin console' })).toBeVisible()
   })
 
+  it('loads the saved gallery for an admin-capable account using the user workspace', async () => {
+    const user = userEvent.setup()
+    const supabaseClient = createSupabaseClient({
+      passwordSession: createSession({
+        user: {
+          app_metadata: {
+            role: 'admin',
+          },
+        },
+      }),
+    })
+    const dataApi = createDataApi({
+      getRenders: vi.fn().mockResolvedValue([
+        {
+          id: 'render-1',
+          created_at: '2026-02-28T08:00:00.000Z',
+          system_type: 'Clean Room',
+          imageUrl: 'https://example.com/render.png',
+        },
+      ]),
+    })
+
+    render(
+      <App
+        supabaseClient={supabaseClient}
+        dataApi={dataApi}
+        adminApi={createAdminApi()}
+        generateImage={vi.fn()}
+      />,
+    )
+
+    await user.type(screen.getByLabelText('Email'), 'david.carreras@valtria.com')
+    await user.type(screen.getByLabelText('Password (optional for magic link)'), 'secret')
+    await user.click(screen.getByRole('button', { name: 'Sign in with password' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'Upload image' }),
+    ).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'My gallery' }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('link', { name: 'Download' }),
+      ).toHaveAttribute('href', 'https://example.com/render.png')
+    })
+  })
+
   it('lets an admin-capable account enter the admin console when logging in through admin access', async () => {
     const user = userEvent.setup()
     const supabaseClient = createSupabaseClient({
@@ -366,6 +414,7 @@ describe('App', () => {
     )
 
     await screen.findByRole('heading', { name: 'Upload image' })
+    expect(screen.getByRole('button', { name: 'Open gallery' })).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'My gallery' }))
 
     expect(

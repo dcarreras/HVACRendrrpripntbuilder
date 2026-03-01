@@ -283,7 +283,6 @@ function App({
   const user = authSession?.user || null
   const userId = user?.id || ''
   const baseSessionView = useMemo(() => createSessionView(user), [user])
-  const currentIsAdmin = baseSessionView.canAccessAdmin
   const sessionView = useMemo(() => {
     if (!baseSessionView.isAuthenticated) {
       return baseSessionView
@@ -305,6 +304,7 @@ function App({
         : 'admin',
     }
   }, [baseSessionView, hasSelectedAccessRole, selectedAccessRole])
+  const isAdminWorkspace = sessionView.role === 'admin'
   const authAccessToken = authSession?.access_token || ''
   const createStepIndex = getCreateStepIndex(createStep)
   const activeCreateStep = CREATE_STEPS[createStepIndex]
@@ -439,7 +439,7 @@ function App({
   }, [supabaseClient])
 
   useEffect(() => {
-    if (!userId || currentIsAdmin) {
+    if (!userId || isAdminWorkspace) {
       setUserProjectId('')
       setProjectLoadError('')
       return undefined
@@ -493,7 +493,7 @@ function App({
       window.clearTimeout(timer)
     }
   }, [
-    currentIsAdmin,
+    isAdminWorkspace,
     dataApi,
     fields.project_name,
     projectCompany,
@@ -501,7 +501,7 @@ function App({
   ])
 
   useEffect(() => {
-    if (!userId || currentIsAdmin) {
+    if (!userId || isAdminWorkspace) {
       setRecentRenders([])
       return undefined
     }
@@ -532,10 +532,10 @@ function App({
     return () => {
       isCurrent = false
     }
-  }, [currentIsAdmin, dataApi, userId])
+  }, [dataApi, isAdminWorkspace, userId])
 
   useEffect(() => {
-    if (!userId || !currentIsAdmin) {
+    if (!userId || !isAdminWorkspace) {
       setAdminProjects([])
       setSelectedAdminProjectId('')
       return undefined
@@ -578,10 +578,10 @@ function App({
     return () => {
       isCurrent = false
     }
-  }, [currentIsAdmin, dataApi, userId])
+  }, [dataApi, isAdminWorkspace, userId])
 
   useEffect(() => {
-    if (!userId || !currentIsAdmin || !selectedAdminProjectId) {
+    if (!userId || !isAdminWorkspace || !selectedAdminProjectId) {
       setAdminDraft(mergeAdminConfig(DEFAULT_ADMIN_CONFIG))
       return undefined
     }
@@ -618,10 +618,10 @@ function App({
     return () => {
       isCurrent = false
     }
-  }, [currentIsAdmin, dataApi, selectedAdminProjectId, userId])
+  }, [dataApi, isAdminWorkspace, selectedAdminProjectId, userId])
 
   useEffect(() => {
-    if (!userId || !currentIsAdmin || !authAccessToken) {
+    if (!userId || !isAdminWorkspace || !authAccessToken) {
       setAdminUsers([])
       setSelectedAdminUserId('')
       setManagedUserDraft(createManagedUserDraft())
@@ -661,7 +661,7 @@ function App({
     return () => {
       isCurrent = false
     }
-  }, [adminApi, authAccessToken, currentIsAdmin, userId])
+  }, [adminApi, authAccessToken, isAdminWorkspace, userId])
 
   useEffect(() => {
     const selectedUser = adminUsers.find((account) => account.id === selectedAdminUserId)
@@ -1387,6 +1387,14 @@ function App({
                     readReferenceFile={readReferenceFile}
                   />
                   <div className="step-page__actions">
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => setUserView(USER_VIEWS.gallery)}
+                    >
+                      <Icon icon={galleryIcon} width="16" height="16" aria-hidden="true" />
+                      Open gallery
+                    </button>
                     <button
                       type="button"
                       className="btn btn-primary"
