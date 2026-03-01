@@ -3,6 +3,7 @@ import {
   createImageResult,
   handler,
   normalizeGenerationRequest,
+  optimizeGenerationForSynchronousRuntime,
   parseReferenceImage,
 } from '../../netlify/functions/generate-image'
 
@@ -167,6 +168,60 @@ describe('createImageResult', () => {
         },
       ),
     ).rejects.toThrow('Prompt exceeds the admin ceiling')
+  })
+
+  it('forces a faster preview profile when a reference image is present', async () => {
+    const editMock = vi.fn().mockResolvedValue({
+      data: [
+        {
+          b64_json: 'QUJD',
+        },
+      ],
+    })
+
+    await createImageResult(
+      {
+        images: {
+          generate: vi.fn(),
+          edit: editMock,
+        },
+      },
+      {
+        prompt: 'test prompt',
+        referenceImage: {
+          dataUrl: 'data:image/png;base64,QUJD',
+        },
+        generation: {
+          size: '1536x1024',
+          quality: 'high',
+          inputFidelity: 'high',
+        },
+      },
+    )
+
+    expect(editMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quality: 'low',
+        input_fidelity: 'low',
+      }),
+    )
+  })
+})
+
+describe('optimizeGenerationForSynchronousRuntime', () => {
+  it('keeps generation settings without a reference image', () => {
+    const original = {
+      model: 'gpt-image-1.5',
+      size: '1536x1024',
+      quality: 'medium',
+      background: 'opaque',
+      moderation: 'auto',
+      inputFidelity: 'high',
+    }
+
+    expect(optimizeGenerationForSynchronousRuntime(original, false)).toEqual(
+      original,
+    )
   })
 })
 
@@ -341,5 +396,87 @@ describe('handler', () => {
 
     expect(spies.upload).toHaveBeenCalledTimes(1)
     expect(spies.insert).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips persistence when autoSave is disabled and returns the save key', async () => {
+    const { client, spies } = createSupabaseAdminClient()
+    const createOpenAiClient = vi.fn(() => ({
+      images: {
+        generate: vi.fn().mockResolvedValue({
+          data: [
+            {
+              b64_json: 'QUJD',
+            },
+          ],
+        }),
+        edit: vi.fn(),
+      },
+    }))
+
+    const response = await handler(
+      createRequest(
+        JSON.stringify({
+          prompt: 'test prompt',
+          projectId: 'project-1',
+          saveKey: 'save-key-1',
+          autoSave: false,
+          generation: {
+            model: 'gpt-image-1.5',
+            size: '1024x1024',
+          },
+        }),
+      ),
+      {
+        supabaseClient: client,
+        openAiApiKey: 'test-key',
+        createOpenAiClient,
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      imageDataUrl: 'data:image/png;base64,QUJD',
+      revisedPrompt: '',
+      saveKey: 'save-key-1',
+    })
+    expect(spies.upload).not.toHaveBeenCalled()
+    expect(spies.insert).not.toHaveBeenCalled()
+  })
+
+  it('returns 504 when OpenAI exceeds the configured runtime budget', async () => {
+    const { client } = createSupabaseAdminClient()
+    const createOpenAiClient = vi.fn(() => ({
+      images: {
+        generate: vi.fn().mockRejectedValue(
+          Object.assign(new Error('timed out'), {
+            name: 'APIConnectionTimeoutError',
+          }),
+        ),
+        edit: vi.fn(),
+      },
+    }))
+
+    const response = await handler(
+      createRequest(
+        JSON.stringify({
+          prompt: 'test prompt',
+          projectId: 'project-1',
+          generation: {
+            model: 'gpt-image-1.5',
+            size: '1024x1024',
+          },
+        }),
+      ),
+      {
+        supabaseClient: client,
+        openAiApiKey: 'test-key',
+        createOpenAiClient,
+      },
+    )
+
+    expect(response.status).toBe(504)
+    expect((await response.json()).error).toContain(
+      'Image generation took too long',
+    )
   })
 })

@@ -18,10 +18,10 @@ describe('PaletteEditor', () => {
 
     await user.selectOptions(
       screen.getByLabelText('Brand accent palette preset'),
-      ['#0A3D6B'],
+      ['#144E86'],
     )
 
-    expect(onCommitHex).toHaveBeenCalledWith('brand', '#0A3D6B')
+    expect(onCommitHex).toHaveBeenCalledWith('brand', '#144E86')
   })
 
   it('restores the last valid value when a custom hex is invalid', async () => {

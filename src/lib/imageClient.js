@@ -26,11 +26,14 @@ export function getImageSize(aspect) {
  *   referenceImage?: ReferenceImage | null
  *   projectId?: string
  *   systemType?: string
+ *   saveKey?: string
  * }} options
  * @returns {{
  *   prompt: string
  *   projectId: string
  *   systemType: string
+ *   saveKey: string
+ *   autoSave: boolean
  *   referenceImage: { dataUrl: string, mimeType: string } | null
  *   generation: {
  *     model: string
@@ -52,11 +55,14 @@ export function buildGenerationRequest({
   referenceImage = null,
   projectId = '',
   systemType = '',
+  saveKey = '',
 }) {
   return {
     prompt,
     projectId,
     systemType,
+    saveKey,
+    autoSave: false,
     referenceImage: referenceImage
       ? {
           dataUrl: referenceImage.dataUrl,
@@ -100,7 +106,8 @@ export async function generateImageRequest(
     headers.Authorization = `Bearer ${accessToken}`
   }
 
-  const response = await requestFetch('/.netlify/functions/generate-image', {
+  const endpoint = '/.netlify/functions/generate-image'
+  const response = await requestFetch(endpoint, {
     method: 'POST',
     headers,
     body: JSON.stringify(payload),
@@ -109,6 +116,12 @@ export async function generateImageRequest(
   const data = await response.json().catch(() => null)
 
   if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(
+        'The local Netlify function was not found. Run the app with "npx.cmd netlify dev" to enable image generation locally.',
+      )
+    }
+
     throw new Error(data?.error || 'Image generation failed.')
   }
 
@@ -117,4 +130,49 @@ export async function generateImageRequest(
   }
 
   return data
+}
+
+/**
+ * @param {{
+ *   imageDataUrl: string
+ *   projectId: string
+ *   systemType: string
+ *   prompt: string
+ *   saveKey: string
+ * }} payload
+ * @param {string | typeof fetch} accessTokenOrFetch
+ * @param {typeof fetch} fetchImpl
+ * @returns {Promise<{ renderId?: string, storagePath?: string, message?: string }>}
+ */
+export async function saveRenderRequest(
+  payload,
+  accessTokenOrFetch = '',
+  fetchImpl = fetch,
+) {
+  const accessToken =
+    typeof accessTokenOrFetch === 'string' ? accessTokenOrFetch : ''
+  const requestFetch =
+    typeof accessTokenOrFetch === 'function' ? accessTokenOrFetch : fetchImpl
+  const response = await requestFetch('/.netlify/functions/save-render', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  })
+
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(
+        'The local Netlify function was not found. Run the app with "npx.cmd netlify dev" to enable gallery saves locally.',
+      )
+    }
+
+    throw new Error(data?.error || 'Saving the render failed.')
+  }
+
+  return data || {}
 }

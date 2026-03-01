@@ -1,5 +1,5 @@
 export const DEFAULT_FIELDS = {
-  project_name: 'Edwards Lifescience 305',
+  project_name: 'Please type your project name here',
   room_type: 'Clean Room',
   building_use: 'Clean room facility',
   visual_style: 'Ultra-clean cleanroom render',
@@ -38,10 +38,10 @@ export const DEFAULT_ADMIN_CONFIG = {
   palette: DEFAULT_PALETTE,
   generation: {
     model: 'gpt-image-1.5',
-    quality: 'medium',
+    quality: 'low',
     background: 'opaque',
     moderation: 'auto',
-    inputFidelity: 'high',
+    inputFidelity: 'low',
   },
   limits: {
     maxPromptTokens: 700,

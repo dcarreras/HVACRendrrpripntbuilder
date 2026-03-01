@@ -25,6 +25,7 @@ function createSession(overrides = {}) {
       id: 'user-1',
       email: 'user@example.com',
       user_metadata: {},
+      app_metadata: {},
       ...userOverrides,
     },
   }
@@ -109,6 +110,25 @@ function createDataApi(overrides = {}) {
   }
 }
 
+function createAdminApi(overrides = {}) {
+  return {
+    listManagedUsers: vi.fn().mockResolvedValue([]),
+    createManagedUser: vi.fn().mockResolvedValue({
+      message: 'User created.',
+    }),
+    updateManagedUser: vi.fn().mockResolvedValue({
+      message: 'User updated.',
+    }),
+    clearManagedUserGallery: vi.fn().mockResolvedValue({
+      message: 'Gallery cleared.',
+    }),
+    deleteManagedUser: vi.fn().mockResolvedValue({
+      message: 'User deleted.',
+    }),
+    ...overrides,
+  }
+}
+
 describe('App', () => {
   it('shows the auth gate in loading mode until Supabase hydration resolves', async () => {
     const deferred = createDeferred()
@@ -120,6 +140,7 @@ describe('App', () => {
       <App
         supabaseClient={supabaseClient}
         dataApi={createDataApi()}
+        adminApi={createAdminApi()}
         generateImage={vi.fn()}
       />,
     )
@@ -146,6 +167,7 @@ describe('App', () => {
       <App
         supabaseClient={supabaseClient}
         dataApi={createDataApi()}
+        adminApi={createAdminApi()}
         generateImage={vi.fn()}
       />,
     )
@@ -156,7 +178,7 @@ describe('App', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole('heading', { name: 'Project basics' }),
+        screen.getByRole('heading', { name: 'Upload image' }),
       ).toBeVisible()
     })
 
@@ -185,19 +207,121 @@ describe('App', () => {
         },
       ]),
     })
+    const adminApi = createAdminApi({
+      listManagedUsers: vi.fn().mockResolvedValue([
+        {
+          id: 'user-2',
+          email: 'staff@example.com',
+          role: 'user',
+          renderCount: 0,
+          latestRenderAt: '',
+          lastSignInAt: '',
+        },
+      ]),
+    })
 
     render(
       <App
         supabaseClient={supabaseClient}
         dataApi={dataApi}
+        adminApi={adminApi}
         generateImage={vi.fn()}
       />,
     )
 
     expect(
-      await screen.findByRole('heading', { name: 'Technical generation settings' }),
+      await screen.findByRole('heading', { name: 'Platform settings and user access' }),
     ).toBeVisible()
     expect(dataApi.listProjects).toHaveBeenCalledTimes(1)
+    expect(adminApi.listManagedUsers).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the admin console when the session app metadata marks the user as admin', async () => {
+    const supabaseClient = createSupabaseClient({
+      initialSession: createSession({
+        user: {
+          app_metadata: {
+            role: 'admin',
+          },
+        },
+      }),
+    })
+
+    render(
+      <App
+        supabaseClient={supabaseClient}
+        dataApi={createDataApi()}
+        adminApi={createAdminApi()}
+        generateImage={vi.fn()}
+      />,
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: 'Platform settings and user access' }),
+    ).toBeVisible()
+  })
+
+  it('lets an admin-capable account enter the user workspace when logging in through user access', async () => {
+    const user = userEvent.setup()
+    const supabaseClient = createSupabaseClient({
+      passwordSession: createSession({
+        user: {
+          app_metadata: {
+            role: 'admin',
+          },
+        },
+      }),
+    })
+
+    render(
+      <App
+        supabaseClient={supabaseClient}
+        dataApi={createDataApi()}
+        adminApi={createAdminApi()}
+        generateImage={vi.fn()}
+      />,
+    )
+
+    await user.type(screen.getByLabelText('Email'), 'david.carreras@valtria.com')
+    await user.type(screen.getByLabelText('Password (optional for magic link)'), 'secret')
+    await user.click(screen.getByRole('button', { name: 'Sign in with password' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'Upload image' }),
+    ).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Admin console' })).toBeVisible()
+  })
+
+  it('lets an admin-capable account enter the admin console when logging in through admin access', async () => {
+    const user = userEvent.setup()
+    const supabaseClient = createSupabaseClient({
+      passwordSession: createSession({
+        user: {
+          app_metadata: {
+            role: 'admin',
+          },
+        },
+      }),
+    })
+
+    render(
+      <App
+        supabaseClient={supabaseClient}
+        dataApi={createDataApi()}
+        adminApi={createAdminApi()}
+        generateImage={vi.fn()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Admin access' }))
+    await user.type(screen.getByLabelText('Email'), 'david.carreras@valtria.com')
+    await user.type(screen.getByLabelText('Password (optional for magic link)'), 'secret')
+    await user.click(screen.getByRole('button', { name: 'Admin sign in' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'Platform settings and user access' }),
+    ).toBeVisible()
+    expect(screen.getByRole('button', { name: 'User workspace' })).toBeVisible()
   })
 
   it('signs out and returns to the auth screen', async () => {
@@ -210,12 +334,13 @@ describe('App', () => {
       <App
         supabaseClient={supabaseClient}
         dataApi={createDataApi()}
+        adminApi={createAdminApi()}
         generateImage={vi.fn()}
       />,
     )
 
     expect(
-      await screen.findByRole('heading', { name: 'Project basics' }),
+      await screen.findByRole('heading', { name: 'Upload image' }),
     ).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: 'Sign out' }))
@@ -223,6 +348,37 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Sign in with password' })).toBeVisible()
     })
+  })
+
+  it('opens the user gallery from the workspace navigation', async () => {
+    const user = userEvent.setup()
+    const supabaseClient = createSupabaseClient({
+      initialSession: createSession(),
+    })
+
+    render(
+      <App
+        supabaseClient={supabaseClient}
+        dataApi={createDataApi()}
+        adminApi={createAdminApi()}
+        generateImage={vi.fn()}
+      />,
+    )
+
+    await screen.findByRole('heading', { name: 'Upload image' })
+    await user.click(screen.getByRole('button', { name: 'My gallery' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'Overview' }),
+    ).toBeVisible()
+    expect(
+      screen.getByText(
+        'Your gallery is ready now. Save any image you want to keep and come back here anytime.',
+      ),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Create your first render' }),
+    ).toBeVisible()
   })
 
   it('creates the project and hydrates the project config after the user provides the company', async () => {
@@ -246,11 +402,14 @@ describe('App', () => {
       <App
         supabaseClient={supabaseClient}
         dataApi={dataApi}
+        adminApi={createAdminApi()}
         generateImage={vi.fn()}
       />,
     )
 
-    await screen.findByRole('heading', { name: 'Project basics' })
+    await screen.findByRole('heading', { name: 'Upload image' })
+    await user.click(screen.getByRole('button', { name: /Setup/ }))
+    await screen.findByRole('heading', { name: 'Project details' })
     await user.type(screen.getByLabelText('Company'), 'Valtria')
 
     await waitFor(() => {
@@ -265,7 +424,7 @@ describe('App', () => {
     })
   })
 
-  it('refreshes the saved gallery after a successful render', async () => {
+  it('saves the generated preview to the gallery on demand', async () => {
     const user = userEvent.setup()
     const supabaseClient = createSupabaseClient({
       initialSession: createSession(),
@@ -286,6 +445,11 @@ describe('App', () => {
     const generateImage = vi.fn().mockResolvedValue({
       imageDataUrl: 'data:image/png;base64,AAA',
     })
+    const saveRender = vi.fn().mockResolvedValue({
+      renderId: 'render-1',
+      storagePath: 'user-1/render-1.png',
+      message: 'Saved to your gallery.',
+    })
     const readReferenceFile = vi.fn().mockResolvedValue({
       dataUrl: 'data:image/png;base64,AAA',
       mimeType: 'image/png',
@@ -296,17 +460,14 @@ describe('App', () => {
       <App
         supabaseClient={supabaseClient}
         dataApi={dataApi}
+        adminApi={createAdminApi()}
         generateImage={generateImage}
+        saveRender={saveRender}
         readReferenceFile={readReferenceFile}
       />,
     )
 
-    await screen.findByRole('heading', { name: 'Project basics' })
-    await user.type(screen.getByLabelText('Company'), 'Valtria')
-
-    await waitFor(() => {
-      expect(dataApi.ensureProject).toHaveBeenCalled()
-    })
+    await screen.findByRole('heading', { name: 'Upload image' })
 
     const fileInput = screen.getByLabelText('Reference image file input')
     const file = new File(['reference'], 'dalux.png', { type: 'image/png' })
@@ -321,11 +482,64 @@ describe('App', () => {
       expect(screen.getByAltText('Reference preview')).toBeVisible()
     })
 
-    await user.click(screen.getByRole('button', { name: 'Generate image' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await screen.findByRole('heading', { name: 'Project details' })
+    await user.type(screen.getByLabelText('Company'), 'Valtria')
+
+    await waitFor(() => {
+      expect(dataApi.ensureProject).toHaveBeenCalled()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await screen.findByRole('heading', { name: 'Confirm render' })
+    await user.click(screen.getByRole('button', { name: 'Open confirmation' }))
+
+    expect(screen.getByRole('dialog')).toBeVisible()
+    expect(generateImage).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Generate now' })).toBeDisabled()
+
+    await user.click(screen.getByRole('checkbox'))
+
+    await user.click(screen.getByRole('button', { name: 'Generate now' }))
 
     await waitFor(() => {
       expect(generateImage).toHaveBeenCalledTimes(1)
     })
+
+    expect(
+      await screen.findByRole('heading', { name: 'Review result' }),
+    ).toBeVisible()
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('link', { name: 'Download' }),
+      ).toHaveAttribute('href', 'data:image/png;base64,AAA')
+    })
+
+    expect(screen.getByRole('button', { name: 'Save to gallery' })).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'Save to gallery' }))
+
+    await waitFor(() => {
+      expect(saveRender).toHaveBeenCalledTimes(1)
+    })
+
+    expect(saveRender).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageDataUrl: 'data:image/png;base64,AAA',
+        projectId: 'project-1',
+        systemType: 'Clean Room',
+      }),
+      'token-123',
+    )
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Saved to your gallery.'),
+      ).toBeVisible()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'My gallery' }))
 
     await waitFor(() => {
       expect(
@@ -333,8 +547,14 @@ describe('App', () => {
       ).toHaveAttribute('href', 'https://example.com/render.png')
     })
 
-    expect(generateImage.mock.calls[0][0].projectId).toBe('project-1')
-    expect(generateImage.mock.calls[0][0].systemType).toBe('Clean Room')
+    expect(generateImage.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        projectId: 'project-1',
+        systemType: 'Clean Room',
+        autoSave: false,
+      }),
+    )
+    expect(typeof generateImage.mock.calls[0][0].saveKey).toBe('string')
     expect(generateImage.mock.calls[0][1]).toBe('token-123')
   })
 })

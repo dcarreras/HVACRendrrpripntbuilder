@@ -4,6 +4,7 @@ import {
   buildGenerationRequest,
   generateImageRequest,
   getImageSize,
+  saveRenderRequest,
 } from './imageClient'
 
 describe('getImageSize', () => {
@@ -24,6 +25,7 @@ describe('buildGenerationRequest', () => {
       adminConfig: DEFAULT_ADMIN_CONFIG,
       projectId: 'project-1',
       systemType: 'Clean Room',
+      saveKey: 'save-key-1',
       referenceImage: {
         dataUrl: 'data:image/png;base64,AAA',
         mimeType: 'image/png',
@@ -35,6 +37,8 @@ describe('buildGenerationRequest', () => {
       prompt: 'test prompt',
       projectId: 'project-1',
       systemType: 'Clean Room',
+      saveKey: 'save-key-1',
+      autoSave: false,
       referenceImage: {
         dataUrl: 'data:image/png;base64,AAA',
         mimeType: 'image/png',
@@ -95,6 +99,7 @@ describe('generateImageRequest', () => {
   it('throws a readable error when the request fails', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
+      status: 500,
       json: vi.fn().mockResolvedValue({
         error: 'OpenAI request failed.',
       }),
@@ -113,5 +118,88 @@ describe('generateImageRequest', () => {
         fetchMock,
       ),
     ).rejects.toThrow('OpenAI request failed.')
+  })
+
+  it('explains when the local Netlify function is missing', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: vi.fn().mockRejectedValue(new Error('Not JSON')),
+    })
+
+    await expect(
+      generateImageRequest(
+        {
+          prompt: 'test',
+          projectId: 'project-1',
+          systemType: 'Clean Room',
+          referenceImage: null,
+          generation: {},
+        },
+        'token-123',
+        fetchMock,
+      ),
+    ).rejects.toThrow(
+      'The local Netlify function was not found. Run the app with "npx.cmd netlify dev" to enable image generation locally.',
+    )
+  })
+})
+
+describe('saveRenderRequest', () => {
+  it('calls the dedicated save endpoint and returns the parsed payload', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        renderId: 'render-1',
+        message: 'Saved to your gallery.',
+      }),
+    })
+
+    const payload = {
+      imageDataUrl: 'data:image/png;base64,AAA',
+      projectId: 'project-1',
+      systemType: 'Clean Room',
+      prompt: 'test',
+      saveKey: 'save-key-1',
+    }
+
+    const result = await saveRenderRequest(payload, 'token-123', fetchMock)
+
+    expect(fetchMock).toHaveBeenCalledWith('/.netlify/functions/save-render', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token-123',
+      },
+      body: JSON.stringify(payload),
+    })
+    expect(result).toEqual({
+      renderId: 'render-1',
+      message: 'Saved to your gallery.',
+    })
+  })
+
+  it('throws a readable error when the save endpoint is missing locally', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: vi.fn().mockRejectedValue(new Error('Not JSON')),
+    })
+
+    await expect(
+      saveRenderRequest(
+        {
+          imageDataUrl: 'data:image/png;base64,AAA',
+          projectId: 'project-1',
+          systemType: 'Clean Room',
+          prompt: 'test',
+          saveKey: 'save-key-1',
+        },
+        'token-123',
+        fetchMock,
+      ),
+    ).rejects.toThrow(
+      'The local Netlify function was not found. Run the app with "npx.cmd netlify dev" to enable gallery saves locally.',
+    )
   })
 })

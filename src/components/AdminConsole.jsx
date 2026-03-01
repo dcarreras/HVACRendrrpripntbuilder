@@ -2,6 +2,8 @@ import { FieldControl } from './FieldControl'
 import { PaletteEditor } from './PaletteEditor'
 import { ValtriaLogo } from './ValtriaLogo'
 
+const USER_ROLE_OPTIONS = ['user', 'admin']
+
 function getUserLabel(user) {
   return (
     user?.user_metadata?.displayName ||
@@ -12,22 +14,9 @@ function getUserLabel(user) {
   )
 }
 
-function formatCurrency(value) {
-  const amount = Number.parseFloat(value)
-
-  if (!Number.isFinite(amount)) {
-    return '$0.00'
-  }
-
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(amount)
-}
-
 function formatDate(value) {
   if (!value) {
-    return 'Unknown'
+    return 'No activity yet'
   }
 
   const date = new Date(value)
@@ -36,18 +25,6 @@ function formatDate(value) {
   }
 
   return date.toLocaleString()
-}
-
-function formatUserId(userId) {
-  if (!userId) {
-    return 'Unknown'
-  }
-
-  if (userId.length <= 12) {
-    return userId
-  }
-
-  return `${userId.slice(0, 8)}...`
 }
 
 export function AdminConsole({
@@ -59,11 +36,15 @@ export function AdminConsole({
   notice,
   projects,
   selectedProjectId,
-  renderHistory,
-  projectCostTotal,
   isLoadingProjects,
-  isLoadingHistory,
-  isSaving,
+  isLoadingConfig,
+  isSavingConfig,
+  managedUsers,
+  selectedUserId,
+  isLoadingUsers,
+  isMutatingUsers,
+  managedUserDraft,
+  newUserDraft,
   onGenerationChange,
   onLimitChange,
   onPromptDefaultsChange,
@@ -72,12 +53,20 @@ export function AdminConsole({
   onSave,
   onReset,
   onTogglePreview,
+  onSelectUser,
+  onManagedUserDraftChange,
+  onNewUserDraftChange,
+  onCreateUser,
+  onSaveUser,
+  onClearUserGallery,
+  onDeleteUser,
+  onOpenUserWorkspace,
   onLogout,
 }) {
   const hasProjects = projects.length > 0
   const selectedProject = projects.find((project) => project.id === selectedProjectId)
-  const overBudget =
-    projectCostTotal > Number.parseFloat(config.limits.budgetLimitUsd || 0)
+  const selectedManagedUser = managedUsers.find((account) => account.id === selectedUserId)
+  const isEditingCurrentAdmin = selectedManagedUser?.id === user?.id
 
   return (
     <div className="app-shell">
@@ -87,11 +76,10 @@ export function AdminConsole({
             <ValtriaLogo />
           </div>
           <div>
-            <p className="t-label">Admin console</p>
-            <h1 className="t-hero">Technical generation settings</h1>
+            <p className="t-label">Admin control panel</p>
+            <h1 className="t-hero">Platform settings and user access</h1>
             <p className="t-body app-header__subtitle">
-              OpenAI defaults, prompt constraints, and the approved color system
-              stay under admin control only.
+              Admins control technical render settings, user accounts, and gallery cleanup.
             </p>
           </div>
         </div>
@@ -100,6 +88,13 @@ export function AdminConsole({
             <span className="badge badge--accent">Admin</span>
             <p className="t-small">{getUserLabel(user)}</p>
           </div>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={onOpenUserWorkspace}
+          >
+            User workspace
+          </button>
           <button type="button" className="btn btn-ghost" onClick={onLogout}>
             Sign out
           </button>
@@ -112,7 +107,7 @@ export function AdminConsole({
           <div className="card__body">
             <div className="field-control">
               <label className="label" htmlFor="admin-project-select">
-                Project
+                Active project
               </label>
               <select
                 id="admin-project-select"
@@ -134,20 +129,22 @@ export function AdminConsole({
             ) : null}
             {!hasProjects ? (
               <p className="t-small">
-                Projects appear here after a user creates one from the main
-                workspace.
+                Projects appear here after a user creates one from the workspace.
               </p>
             ) : null}
             {selectedProject ? (
               <p className="t-small">
-                Editing configuration for {selectedProject.name} ({selectedProject.company}).
+                Editing technical defaults for {selectedProject.name} ({selectedProject.company}).
               </p>
+            ) : null}
+            {isLoadingConfig ? (
+              <p className="t-small">Loading the saved technical configuration.</p>
             ) : null}
           </div>
         </section>
 
         <section className="card card--hvac">
-          <header className="card__header">OpenAI generation settings</header>
+          <header className="card__header">Image generation defaults</header>
           <div className="card__body">
             <FieldControl
               id="admin-model"
@@ -204,7 +201,7 @@ export function AdminConsole({
               type="number"
               value={config.limits.maxAttemptsPerSession}
               onChange={(value) => onLimitChange('maxAttemptsPerSession', value)}
-              hint="After this cap is reached, the user must wait for a new session or for admin to raise the limit."
+              hint="This is the maximum amount of renders allowed in one browser session."
             />
             <FieldControl
               id="admin-budget-limit"
@@ -212,7 +209,7 @@ export function AdminConsole({
               type="number"
               value={config.limits.budgetLimitUsd}
               onChange={(value) => onLimitChange('budgetLimitUsd', value)}
-              hint="Passive warning threshold for the selected project."
+              hint="Internal control threshold for the selected project."
             />
           </div>
         </section>
@@ -239,32 +236,31 @@ export function AdminConsole({
         </section>
 
         <section className="card card--hvac">
-          <header className="card__header">Palette manager</header>
+          <header className="card__header">Color palette</header>
           <div className="card__body">
             <PaletteEditor palette={config.palette} onCommitHex={onPaletteChange} />
           </div>
         </section>
 
         <section className="card">
-          <header className="card__header">Admin actions</header>
+          <header className="card__header">Save technical settings</header>
           <div className="card__body admin-actions">
             <div className="admin-actions__buttons">
               <button
                 type="button"
                 className="btn btn-primary"
                 onClick={onSave}
-                disabled={!selectedProjectId || isSaving}
+                disabled={!selectedProjectId || isSavingConfig}
               >
-                {isSaving ? 'Saving...' : 'Save configuration'}
+                {isSavingConfig ? 'Saving...' : 'Save settings'}
               </button>
               <button type="button" className="btn btn-ghost" onClick={onReset}>
-                Reset to defaults
+                Reset editor
               </button>
               <button type="button" className="btn btn-ghost" onClick={onTogglePreview}>
                 {showPreview ? 'Hide prompt preview' : 'Show prompt preview'}
               </button>
             </div>
-            {notice ? <p className="t-small admin-actions__notice">{notice}</p> : null}
             {showPreview ? (
               <pre className="prompt-output t-code">{previewPrompt}</pre>
             ) : null}
@@ -272,51 +268,163 @@ export function AdminConsole({
         </section>
 
         <section className="card">
-          <header className="card__header">Historial de renders</header>
-          <div className="card__body">
-            <p className="t-small">
-              Total project cost: {formatCurrency(projectCostTotal)} /{' '}
-              {formatCurrency(config.limits.budgetLimitUsd)}
-            </p>
-            {overBudget ? (
-              <p className="image-panel__warning">
-                The selected project is above the configured budget limit.
-              </p>
-            ) : null}
-            {!selectedProjectId ? (
-              <p className="t-small">
-                Select a project to load its render history.
-              </p>
-            ) : isLoadingHistory ? (
-              <p className="t-small">Loading render history from Supabase.</p>
-            ) : renderHistory.length ? (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Usuario</th>
-                    <th>Sistema</th>
-                    <th>Coste</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {renderHistory.map((render) => (
-                    <tr key={render.id}>
-                      <td>{formatDate(render.created_at)}</td>
-                      <td>{formatUserId(render.user_id)}</td>
-                      <td>{render.system_type || 'Unknown'}</td>
-                      <td>{formatCurrency(render.cost_usd)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="t-small">
-                No renders have been saved for this project yet.
-              </p>
-            )}
+          <header className="card__header">User access management</header>
+          <div className="card__body admin-users">
+            <div className="admin-users__section">
+              <h2 className="t-title admin-users__title">Create user</h2>
+              <div className="form-grid">
+                <FieldControl
+                  id="admin-new-user-email"
+                  label="Email"
+                  type="email"
+                  value={newUserDraft.email}
+                  onChange={(value) => onNewUserDraftChange('email', value)}
+                  placeholder="name@company.com"
+                />
+                <FieldControl
+                  id="admin-new-user-password"
+                  label="Temporary password"
+                  type="password"
+                  value={newUserDraft.password}
+                  onChange={(value) => onNewUserDraftChange('password', value)}
+                  placeholder="At least 4 characters"
+                />
+                <FieldControl
+                  id="admin-new-user-role"
+                  label="Role"
+                  value={newUserDraft.role}
+                  options={USER_ROLE_OPTIONS}
+                  onChange={(value) => onNewUserDraftChange('role', value)}
+                />
+              </div>
+              <div className="admin-actions__buttons">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={onCreateUser}
+                  disabled={isMutatingUsers}
+                >
+                  {isMutatingUsers ? 'Working...' : 'Create user'}
+                </button>
+              </div>
+            </div>
+
+            <div className="admin-users__section">
+              <h2 className="t-title admin-users__title">Manage existing user</h2>
+              {isLoadingUsers ? (
+                <p className="t-small">Loading user accounts from Supabase.</p>
+              ) : managedUsers.length ? (
+                <>
+                  <div className="field-control">
+                    <label className="label" htmlFor="admin-managed-user-select">
+                      User
+                    </label>
+                    <select
+                      id="admin-managed-user-select"
+                      className="input"
+                      value={selectedUserId}
+                      onChange={(event) => onSelectUser(event.target.value)}
+                    >
+                      {managedUsers.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.email} ({account.role})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {selectedManagedUser ? (
+                    <>
+                      <div className="admin-users__summary">
+                        <article className="page-summary__item">
+                          <span className="t-label">Role</span>
+                          <strong>{selectedManagedUser.role}</strong>
+                        </article>
+                        <article className="page-summary__item">
+                          <span className="t-label">Saved renders</span>
+                          <strong>{selectedManagedUser.renderCount}</strong>
+                        </article>
+                        <article className="page-summary__item">
+                          <span className="t-label">Last render</span>
+                          <strong>{formatDate(selectedManagedUser.latestRenderAt)}</strong>
+                        </article>
+                        <article className="page-summary__item">
+                          <span className="t-label">Last sign-in</span>
+                          <strong>{formatDate(selectedManagedUser.lastSignInAt)}</strong>
+                        </article>
+                      </div>
+
+                      <div className="form-grid">
+                        <FieldControl
+                          id="admin-managed-user-role"
+                          label="Role"
+                          value={managedUserDraft.role}
+                          options={USER_ROLE_OPTIONS}
+                          onChange={(value) => onManagedUserDraftChange('role', value)}
+                        />
+                        <FieldControl
+                          id="admin-managed-user-password"
+                          label="New password (optional)"
+                          type="password"
+                          value={managedUserDraft.password}
+                          onChange={(value) =>
+                            onManagedUserDraftChange('password', value)
+                          }
+                          placeholder="Leave blank to keep the current password"
+                        />
+                      </div>
+
+                      <div className="admin-actions__buttons">
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={onSaveUser}
+                          disabled={isMutatingUsers}
+                        >
+                          {isMutatingUsers ? 'Working...' : 'Save user access'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={onClearUserGallery}
+                          disabled={isMutatingUsers}
+                        >
+                          Clear gallery
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-danger"
+                          onClick={onDeleteUser}
+                          disabled={isMutatingUsers || isEditingCurrentAdmin}
+                        >
+                          Delete user
+                        </button>
+                      </div>
+                      {isEditingCurrentAdmin ? (
+                        <p className="t-small admin-actions__notice">
+                          The active admin account can be edited, but it cannot be deleted.
+                        </p>
+                      ) : null}
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <p className="t-small">
+                  No user accounts found yet. Create the first user from this panel.
+                </p>
+              )}
+            </div>
           </div>
         </section>
+
+        {notice ? (
+          <section className="card">
+            <header className="card__header">Status</header>
+            <div className="card__body">
+              <p className="t-small admin-actions__notice">{notice}</p>
+            </div>
+          </section>
+        ) : null}
       </main>
     </div>
   )

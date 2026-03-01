@@ -3,18 +3,16 @@ import { ValtriaLogo } from './ValtriaLogo'
 
 const COPY = {
   user: {
-    badge: 'User workspace',
-    title: 'Generate a render',
-    description:
-      'Complete the short brief, paste the Dalux BIM image, and download the final render.',
+    badge: 'User access',
+    title: 'Sign in',
+    description: 'Use your email to continue to the render workspace.',
     submitLabel: 'Sign in with password',
     magicLabel: 'Send magic link',
   },
   admin: {
     badge: 'Admin access',
-    title: 'Configure the technical engine',
-    description:
-      'Manage OpenAI defaults, prompt guardrails, and the approved HEX palette.',
+    title: 'Admin sign in',
+    description: 'Use your admin account to manage platform settings.',
     submitLabel: 'Admin sign in',
     magicLabel: 'Admin magic link',
   },
@@ -66,27 +64,29 @@ export function AuthScreen({
         : ''
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
+    <div className="app-shell app-shell--auth">
+      <header className="app-header app-header--auth">
         <div className="app-header__brand">
-          <div className="valtria-logo" aria-label="Valtria brand">
-            <ValtriaLogo />
-          </div>
           <div>
             <p className="t-label">HVAC Render Builder</p>
-            <h1 className="t-hero">Valtria Render Studio</h1>
+            <h1 className="t-hero">Sign in to your workspace</h1>
             <p className="t-body app-header__subtitle">
-              Sign in with Supabase to access the user or admin workspace while
-              keeping the OpenAI key server-side.
+              Access your renders and keep everything in one place.
             </p>
           </div>
         </div>
       </header>
 
-      <main className="auth-layout">
+      <main className="auth-layout auth-layout--centered">
         <section className="card card--hvac auth-card">
           <div className="card__body auth-card__body">
             <div className="auth-panel">
+              <div
+                className="valtria-logo valtria-logo--light auth-panel__logo"
+                aria-label="Valtria brand"
+              >
+                <ValtriaLogo variant="light" />
+              </div>
               <span className="badge badge--accent">{COPY[selectedRole].badge}</span>
               <strong className="auth-panel__title">{COPY[selectedRole].title}</strong>
               <p className="t-small auth-panel__copy">

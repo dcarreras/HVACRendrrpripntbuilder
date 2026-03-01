@@ -16,6 +16,7 @@ const ALLOWED_REFERENCE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 export const DEFAULT_IMAGE_MODEL = 'gpt-image-1.5'
 export const DEFAULT_MAX_PROMPT_TOKENS = 700
 export const DEFAULT_RENDER_COST_USD = 0.04
+export const OPENAI_SYNC_TIMEOUT_MS = 24_000
 
 function createResponse(statusCode, payload) {
   return new Response(JSON.stringify(payload), {
@@ -28,6 +29,14 @@ function createHttpError(status, message) {
   const error = new Error(message)
   error.status = status
   return error
+}
+
+function toTrimmedText(value) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim()
 }
 
 function readAllowedValue(value, allowedValues, fallback) {
@@ -104,6 +113,21 @@ export function normalizeGenerationRequest(
       ALLOWED_INPUT_FIDELITY,
       'high',
     ),
+  }
+}
+
+export function optimizeGenerationForSynchronousRuntime(
+  generation,
+  hasReferenceImage,
+) {
+  if (!hasReferenceImage) {
+    return generation
+  }
+
+  return {
+    ...generation,
+    quality: 'low',
+    inputFidelity: 'low',
   }
 }
 
@@ -202,6 +226,10 @@ export async function createImageResult(
 
   const generation = normalizeGenerationRequest(payload?.generation, defaultModel)
   const referenceImage = parseReferenceImage(payload?.referenceImage)
+  const runtimeGeneration = optimizeGenerationForSynchronousRuntime(
+    generation,
+    Boolean(referenceImage),
+  )
 
   if (referenceImage) {
     const imageFile = await toFile(
@@ -213,14 +241,14 @@ export async function createImageResult(
     )
 
     const result = await client.images.edit({
-      model: generation.model,
+      model: runtimeGeneration.model,
       prompt,
       image: imageFile,
-      size: generation.size,
-      quality: generation.quality,
-      background: generation.background,
-      moderation: generation.moderation,
-      input_fidelity: generation.inputFidelity,
+      size: runtimeGeneration.size,
+      quality: runtimeGeneration.quality,
+      background: runtimeGeneration.background,
+      moderation: runtimeGeneration.moderation,
+      input_fidelity: runtimeGeneration.inputFidelity,
       n: 1,
       output_format: 'png',
     })
@@ -233,12 +261,12 @@ export async function createImageResult(
   }
 
   const result = await client.images.generate({
-    model: generation.model,
+    model: runtimeGeneration.model,
     prompt,
-    size: generation.size,
-    quality: generation.quality,
-    background: generation.background,
-    moderation: generation.moderation,
+    size: runtimeGeneration.size,
+    quality: runtimeGeneration.quality,
+    background: runtimeGeneration.background,
+    moderation: runtimeGeneration.moderation,
     n: 1,
     output_format: 'png',
   })
@@ -324,6 +352,10 @@ function schedulePersistence(context, task) {
   return wrappedTask
 }
 
+function isOpenAiTimeoutError(error) {
+  return error?.name === 'APIConnectionTimeoutError'
+}
+
 export async function handler(
   request,
   contextOrDependencies = {},
@@ -344,6 +376,8 @@ export async function handler(
     createOpenAiClient = (apiKey) =>
       new OpenAI({
         apiKey,
+        timeout: OPENAI_SYNC_TIMEOUT_MS,
+        maxRetries: 0,
       }),
     now = () => Date.now(),
   } = dependencies
@@ -370,25 +404,37 @@ export async function handler(
     return createResponse(400, { error: 'Request body must be valid JSON.' })
   }
 
-  const projectId = String(payload?.projectId || '').trim()
+  const projectId = toTrimmedText(payload?.projectId)
   if (!projectId) {
     return createResponse(400, { error: 'projectId is required.' })
   }
 
+  const saveKey = toTrimmedText(payload?.saveKey) || String(now())
+  const shouldAutoSave = payload?.autoSave !== false
+
   try {
     const openAiClient = createOpenAiClient(openAiApiKey)
     const result = await createImageResult(openAiClient, payload, defaultModel)
+    const resultPayload = {
+      ...result,
+      saveKey,
+    }
+
+    if (!shouldAutoSave) {
+      return createResponse(200, resultPayload)
+    }
+
     const persistRender = async () => {
       const storagePath = await uploadGeneratedImage(adminClient, {
         userId: user.id,
         imageDataUrl: result.imageDataUrl,
-        timestamp: now(),
+        timestamp: saveKey,
       })
       const renderRecord = await persistRenderRecord(adminClient, {
         user_id: user.id,
         project_id: projectId,
-        system_type: String(payload?.systemType || '').trim() || 'Unknown system',
-        prompt_used: String(payload?.prompt || '').trim(),
+        system_type: toTrimmedText(payload?.systemType) || 'Unknown system',
+        prompt_used: toTrimmedText(payload?.prompt),
         image_url: storagePath,
         cost_usd: DEFAULT_RENDER_COST_USD,
       })
@@ -404,10 +450,17 @@ export async function handler(
       : await schedulePersistence(context, persistRender)
 
     return createResponse(200, {
-      ...result,
+      ...resultPayload,
       ...(persistedResult || {}),
     })
   } catch (error) {
+    if (isOpenAiTimeoutError(error)) {
+      return createResponse(504, {
+        error:
+          'Image generation took too long for the current Netlify function runtime. A faster preview profile is already applied for reference renders, but if this continues try a smaller reference image and retry.',
+      })
+    }
+
     const statusCode =
       typeof error?.status === 'number' && error.status >= 400
         ? error.status

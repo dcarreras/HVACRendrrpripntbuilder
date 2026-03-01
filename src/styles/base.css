@@ -13,17 +13,19 @@ body {
   font: 400 14px/1.7 var(--font-body);
   color: var(--text-primary);
   background:
+    linear-gradient(rgba(245, 247, 249, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 247, 249, 0.035) 1px, transparent 1px),
     radial-gradient(
-      1000px 400px at 10% -10%,
-      rgba(27, 107, 181, 0.08),
-      transparent 60%
+      900px 320px at 50% -10%,
+      rgba(27, 107, 181, 0.14),
+      transparent 58%
     ),
-    radial-gradient(
-      900px 350px at 100% 0%,
-      rgba(74, 159, 212, 0.06),
-      transparent 55%
-    ),
-    var(--bg-app);
+    linear-gradient(180deg, #06080F, #0C1220 58%, #06080F);
+  background-size:
+    36px 36px,
+    36px 36px,
+    auto,
+    auto;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -63,8 +65,8 @@ body {
 }
 
 .t-label {
-  font: 400 10px/1 var(--font-mono);
-  letter-spacing: 0.2em;
+  font: 600 10px/1 var(--font-body);
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   margin: 0;
 }

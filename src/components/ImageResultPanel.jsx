@@ -1,4 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Icon } from '@iconify/react'
+import {
+  arrowLeftIcon,
+  checkIcon,
+  clockIcon,
+  galleryIcon,
+  walletIcon,
+} from '../lib/uiIcons'
 
 function createDownloadName(projectName) {
   const slug = projectName
@@ -9,22 +17,17 @@ function createDownloadName(projectName) {
   return `${slug || 'hvac-render'}.png`
 }
 
-function createSavedRenderName(projectName, renderId) {
-  const baseName = createDownloadName(projectName).replace(/\.png$/i, '')
-  return `${baseName}-${renderId || 'saved-render'}.png`
-}
+function formatCurrency(value) {
+  const amount = Number.parseFloat(value)
 
-function formatDate(value) {
-  if (!value) {
-    return 'Unknown'
+  if (!Number.isFinite(amount)) {
+    return '$0.00'
   }
 
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return 'Unknown'
-  }
-
-  return date.toLocaleString()
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amount)
 }
 
 export function ImageResultPanel({
@@ -33,19 +36,20 @@ export function ImageResultPanel({
   imageResult,
   projectName,
   onGenerate,
-  tokenEstimate,
-  maxPromptTokens,
-  attemptCount,
-  maxAttempts,
+  onAdjust,
+  onSaveToGallery,
+  onOpenGallery,
   blockReason = '',
-  recentRenders = [],
+  estimatedCostUsd = 0.04,
+  estimatedTimeLabel = '20-45 seconds',
+  canSaveToGallery = false,
+  isSavingToGallery = false,
+  saveMessage = '',
 }) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [completedSeconds, setCompletedSeconds] = useState(0)
   const startedAtRef = useRef(0)
   const hasImage = Boolean(imageResult?.imageDataUrl)
-  const promptUsage = Math.min(100, Math.round((tokenEstimate / maxPromptTokens) * 100))
-  const remainingAttempts = Math.max(0, maxAttempts - attemptCount)
   const progressPercent = useMemo(() => {
     if (isGenerating) {
       return Math.min(94, 18 + elapsedSeconds * 7)
@@ -83,23 +87,27 @@ export function ImageResultPanel({
 
   return (
     <div className="image-panel">
-      <div className="usage-meter">
-        <div className="usage-meter__row">
-          <span className="t-small">Prompt budget</span>
-          <strong>
-            {tokenEstimate} / {maxPromptTokens} tokens
-          </strong>
-        </div>
-        <div className="usage-meter__track" aria-hidden="true">
-          <span
-            className={`usage-meter__fill ${promptUsage >= 100 ? 'usage-meter__fill--danger' : ''}`.trim()}
-            style={{ width: `${promptUsage}%` }}
-          />
-        </div>
-        <p className="t-small usage-meter__caption">
-          {remainingAttempts} of {maxAttempts} attempts left in this browser.
-        </p>
+      <div className="result-badges">
+        <article className="render-estimate__item">
+          <span className="confirm-modal__metric-label">
+            <Icon icon={walletIcon} width="16" height="16" aria-hidden="true" />
+            <span className="t-label">Cost</span>
+          </span>
+          <strong>{formatCurrency(estimatedCostUsd)}</strong>
+        </article>
+        <article className="render-estimate__item">
+          <span className="confirm-modal__metric-label">
+            <Icon icon={clockIcon} width="16" height="16" aria-hidden="true" />
+            <span className="t-label">Time</span>
+          </span>
+          <strong>{estimatedTimeLabel}</strong>
+        </article>
       </div>
+
+      <p className="t-small render-estimate__caption">
+        Review the result below. You can change settings, render again, or open
+        your gallery.
+      </p>
 
       {(isGenerating || hasImage) && (
         <div className="load-meter" aria-live="polite">
@@ -118,38 +126,16 @@ export function ImageResultPanel({
             />
           </div>
           <p className="t-small load-meter__caption">
-            Live estimate while the server prepares the render output.
+            Your image appears here as soon as it is ready.
           </p>
         </div>
       )}
 
       {blockReason ? <p className="image-panel__warning">{blockReason}</p> : null}
 
-      <div className="image-panel__actions">
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={onGenerate}
-          disabled={isGenerating || Boolean(blockReason)}
-        >
-          {isGenerating
-            ? 'Generating image...'
-            : hasImage
-              ? 'Generate again'
-              : 'Generate image'}
-        </button>
-        {hasImage ? (
-          <a
-            className="btn btn-ghost"
-            href={imageResult.imageDataUrl}
-            download={createDownloadName(projectName)}
-          >
-            Download image
-          </a>
-        ) : null}
-      </div>
-
       {error ? <p className="image-panel__error">{error}</p> : null}
+
+      {saveMessage ? <p className="image-panel__notice">{saveMessage}</p> : null}
 
       {hasImage ? (
         <figure className="image-panel__result">
@@ -159,53 +145,62 @@ export function ImageResultPanel({
             className="image-panel__image"
           />
           <figcaption className="t-small image-panel__caption">
-            Final render generated with the server-side OpenAI pipeline.
+            Latest render preview.
           </figcaption>
         </figure>
       ) : (
         <div className="prompt-placeholder t-small">
-          The app builds the technical prompt in the background. Generate the
-          image to preview and download the final render here.
+          Your render will appear here after confirmation.
         </div>
       )}
 
-      <div className="step-block">
-        <p className="t-section">Saved renders</p>
-        {recentRenders.length ? (
-          <div>
-            {recentRenders.map((render) => (
-              <article key={render.id} className="card">
-                <div className="card__body">
-                  {render.imageUrl ? (
-                    <img
-                      src={render.imageUrl}
-                      alt={`Saved ${render.system_type || 'HVAC'} render`}
-                      className="image-panel__image"
-                    />
-                  ) : (
-                    <p className="t-small">Preview unavailable.</p>
-                  )}
-                  <p className="t-small">{formatDate(render.created_at)}</p>
-                  <p className="t-small">{render.system_type || 'Unknown system'}</p>
-                  {render.imageUrl ? (
-                    <a
-                      className="btn btn-ghost"
-                      href={render.imageUrl}
-                      download={createSavedRenderName(projectName, render.id)}
-                    >
-                      Download
-                    </a>
-                  ) : null}
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className="prompt-placeholder t-small">
-            The latest 10 saved renders for the current user will appear here
-            after the first successful generation.
-          </div>
-        )}
+      <div className="image-panel__actions">
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={onAdjust}
+        >
+          <Icon icon={arrowLeftIcon} width="16" height="16" aria-hidden="true" />
+          Adjust settings
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={onGenerate}
+          disabled={isGenerating || Boolean(blockReason)}
+        >
+          <Icon icon={checkIcon} width="16" height="16" aria-hidden="true" />
+          {isGenerating ? 'Generating image...' : 'Repeat process'}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={onSaveToGallery}
+          disabled={!hasImage || !canSaveToGallery || isSavingToGallery}
+        >
+          {isSavingToGallery
+            ? 'Saving...'
+            : imageResult?.isSavedToGallery
+              ? 'Saved to gallery'
+              : 'Save to gallery'}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={onOpenGallery}
+        >
+          <Icon icon={galleryIcon} width="16" height="16" aria-hidden="true" />
+          Open gallery
+        </button>
+        {hasImage ? (
+          <a
+            className="btn btn-ghost"
+            href={imageResult.imageDataUrl}
+            download={createDownloadName(projectName)}
+          >
+            Download
+          </a>
+        ) : null}
       </div>
     </div>
   )
