@@ -1,13 +1,15 @@
 import { useState } from 'react'
 
-export function ValtriaLogo() {
+export function ValtriaLogo({ variant = 'dark' }) {
   const [hasAsset, setHasAsset] = useState(true)
+  const logoSrc =
+    variant === 'light' ? '/valtria-logo-light.svg' : '/valtria-logo.svg'
 
   if (hasAsset) {
     return (
       <img
         className="valtria-logo__image"
-        src="/valtria-logo.svg"
+        src={logoSrc}
         alt="Valtria"
         onError={() => setHasAsset(false)}
       />

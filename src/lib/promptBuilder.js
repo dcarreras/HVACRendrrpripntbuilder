@@ -73,6 +73,18 @@ function toList(value) {
 }
 
 /**
+ * @param {string} value
+ * @returns {number}
+ */
+export function estimatePromptTokens(value) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return 0
+  }
+
+  return Math.max(1, Math.ceil(value.trim().length / 4))
+}
+
+/**
  * @param {PromptFields} fields
  * @param {AdminConfig} adminConfig
  * @returns {string}
@@ -80,6 +92,7 @@ function toList(value) {
 export function buildPrompt(fields, adminConfig) {
   const palette = adminConfig.palette
   const referenceFidelity = adminConfig.promptDefaults.referenceFidelity
+  const extraDetail = fields.extra_detail?.trim()
   const referenceAdapter =
     REFERENCE_FIDELITY_MAP[referenceFidelity] ||
     REFERENCE_FIDELITY_MAP[
@@ -130,6 +143,9 @@ export function buildPrompt(fields, adminConfig) {
     `- Background gradient: ${palette.bg_dark.hex} -> ${palette.bg_light.hex}`,
     `- Pipe coding: hot ${palette.hot.hex}, cold ${palette.cold.hex}`,
     `- Brand accent: ${palette.brand.hex} applied to <= 5% of visible area`,
+    extraDetail ? '' : null,
+    extraDetail ? 'ADDITIONAL USER DETAIL' : null,
+    extraDetail ? `- ${extraDetail}` : null,
     '',
     'HARD CONSTRAINTS (NON-NEGOTIABLE)',
     '- Preserve exact BIM geometry, routing, and equipment placement.',

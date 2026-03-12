@@ -4,10 +4,10 @@ import { normalizeHex } from '../lib/promptBuilder'
 const CUSTOM_VALUE = '__custom__'
 
 const EXCLUDED_COLORS = [
-  { hex: '#9C27B0', label: 'Purple / magenta' },
-  { hex: '#4CAF50', label: 'Intense BIM green' },
-  { hex: '#2196F3', label: 'Electric blue' },
+  { hex: '#9C27B0', label: 'Bright violet' },
+  { hex: '#2196F3', label: 'Neon blue' },
   { hex: '#FF9800', label: 'Bright orange' },
+  { hex: '#FFFFFF', label: 'Pure white' },
 ]
 
 const NEUTRAL_OPTIONS = [
@@ -23,8 +23,8 @@ const NEUTRAL_OPTIONS = [
 
 const BRAND_OPTIONS = [
   { label: 'Valtria blue', hex: '#1B6BB5' },
-  { label: 'Clean cyan', hex: '#2F7FBF' },
-  { label: 'Deep navy', hex: '#0A3D6B' },
+  { label: 'Deep brand blue', hex: '#144E86' },
+  { label: 'Soft brand blue', hex: '#4B7EA9' },
 ]
 
 const HOT_OPTIONS = [

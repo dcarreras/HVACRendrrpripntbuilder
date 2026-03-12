@@ -18,6 +18,7 @@
  * @property {string} camera
  * @property {string} framing
  * @property {string} aspect
+ * @property {string} extra_detail
  */
 
 /**
@@ -39,6 +40,10 @@
  * @property {'opaque' | 'transparent' | 'auto'} generation.background
  * @property {'auto' | 'low'} generation.moderation
  * @property {'low' | 'high'} generation.inputFidelity
+ * @property {Object} limits
+ * @property {number} limits.maxPromptTokens
+ * @property {number} limits.maxAttemptsPerSession
+ * @property {number} limits.budgetLimitUsd
  * @property {Object} promptDefaults
  * @property {string} promptDefaults.referenceFidelity
  * @property {string} promptDefaults.negative

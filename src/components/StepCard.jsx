@@ -28,9 +28,7 @@ export function StepCard({
         <h2 className="t-title step-title">{title}</h2>
       </header>
       <div className="card__body">
-        <p className="step-help t-small">
-          <strong>What this affects:</strong> {whatThisAffects}
-        </p>
+        {whatThisAffects ? <p className="step-help t-small">{whatThisAffects}</p> : null}
         {children}
       </div>
     </section>

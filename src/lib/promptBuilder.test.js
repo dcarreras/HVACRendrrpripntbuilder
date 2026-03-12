@@ -5,6 +5,7 @@ import {
   REFERENCE_FIDELITY_MAP,
   SHADOW_MAP,
   buildPrompt,
+  estimatePromptTokens,
   normalizeHex,
 } from './promptBuilder'
 
@@ -86,5 +87,25 @@ describe('buildPrompt', () => {
 
     expect(prompt).toContain(`- Consistency mode: ${referenceFidelity}.`)
     expect(prompt).toContain(REFERENCE_FIDELITY_MAP[referenceFidelity][0])
+  })
+
+  it('includes the optional extra detail block when the user adds one', () => {
+    const prompt = buildPrompt(
+      {
+        ...DEFAULT_FIELDS,
+        extra_detail: 'Keep the perimeter coves subtle and fully integrated.',
+      },
+      DEFAULT_ADMIN_CONFIG,
+    )
+
+    expect(prompt).toContain('ADDITIONAL USER DETAIL')
+    expect(prompt).toContain('- Keep the perimeter coves subtle and fully integrated.')
+  })
+})
+
+describe('estimatePromptTokens', () => {
+  it('returns an approximate token count from the prompt length', () => {
+    expect(estimatePromptTokens('12345678')).toBe(2)
+    expect(estimatePromptTokens('')).toBe(0)
   })
 })

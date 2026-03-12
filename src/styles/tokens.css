@@ -1,31 +1,31 @@
 :root {
-  --font-display: 'Barlow Condensed', sans-serif;
+  --font-display: 'Barlow', sans-serif;
   --font-body: 'Barlow', sans-serif;
-  --font-mono: 'DM Mono', monospace;
+  --font-mono: 'Barlow', sans-serif;
 
-  --bg-app: #E8ECF0;
-  --bg-subtle: #F5F7F9;
-  --bg-surface: #FFFFFF;
-  --bg-raised: #F0F3F6;
+  --bg-app: #06080F;
+  --bg-subtle: #EEF2F6;
+  --bg-surface: #F5F7F9;
+  --bg-raised: #E4EAF0;
 
-  --border: #CDD3DC;
+  --border: #CDD6E0;
   --border-focus: #1B6BB5;
 
-  --text-primary: #1E2530;
-  --text-secondary: #4A5566;
-  --text-muted: #8090A0;
-  --text-inverse: #F0F3F6;
+  --text-primary: #0C1220;
+  --text-secondary: #344254;
+  --text-muted: #667689;
+  --text-inverse: #F5F7F9;
 
-  --neutral-900: #1C2128;
-  --neutral-700: #3C4550;
-  --neutral-500: #6A7480;
-  --neutral-300: #9DAAB8;
-  --neutral-100: #C4CDD6;
+  --neutral-900: #0C1220;
+  --neutral-700: #1E2530;
+  --neutral-500: #556476;
+  --neutral-300: #9CA9B7;
+  --neutral-100: #D2D8E0;
 
   --accent: #1B6BB5;
-  --accent-dark: #0A3D6B;
-  --accent-light: #4A9FD4;
-  --accent-tint: rgba(27, 107, 181, 0.08);
+  --accent-dark: #144E86;
+  --accent-light: #4B7EA9;
+  --accent-tint: rgba(27, 107, 181, 0.1);
 
   --success: #6A8A7A;
   --warning: #C6A84B;

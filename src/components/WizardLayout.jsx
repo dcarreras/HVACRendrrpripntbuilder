@@ -42,35 +42,36 @@ export function WizardLayout({
       </header>
 
       <main className="wizard-main">
-        <aside className="progress-rail card" aria-label="Progress rail">
-          <h2 className="t-section">Progress</h2>
-          <ol className="progress-rail__list">
-            {steps.map((step, index) => {
-              const active = step.id === activeStep
-              const completed = index < steps.findIndex((item) => item.id === activeStep)
-              const className = [
-                'nav-item',
-                active ? 'active' : '',
-                completed ? 'is-completed' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')
+        {steps.length ? (
+          <nav className="progress-rail card" aria-label="Progress rail">
+            <ol className="progress-rail__list">
+              {steps.map((step, index) => {
+                const active = step.id === activeStep
+                const completed = index < steps.findIndex((item) => item.id === activeStep)
+                const className = [
+                  'nav-item',
+                  active ? 'active' : '',
+                  completed ? 'is-completed' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')
 
-              return (
-                <li key={step.id}>
-                  <button
-                    type="button"
-                    className={className}
-                    onClick={() => onStepClick(step.id)}
-                  >
-                    <span className="nav-item__index">{index + 1}</span>
-                    <span>{step.title}</span>
-                  </button>
-                </li>
-              )
-            })}
-          </ol>
-        </aside>
+                return (
+                  <li key={step.id}>
+                    <button
+                      type="button"
+                      className={className}
+                      onClick={() => onStepClick(step.id)}
+                    >
+                      <span className="nav-item__index">{index + 1}</span>
+                      <span>{step.title}</span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ol>
+          </nav>
+        ) : null}
 
         <section className="wizard-content">{children}</section>
       </main>
